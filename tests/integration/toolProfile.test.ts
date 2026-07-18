@@ -166,6 +166,20 @@ describe("integration: TDMCP_TOOL_PROFILE", () => {
     expect(names).toHaveLength(15);
   });
 
+  it.each([
+    "core",
+    "inspect",
+    "build",
+    "show",
+    "library",
+  ] as const)("%s temporarily exposes exactly the 15-tool directory surface", async (profile) => {
+    const names = await toolNames({ TDMCP_TOOL_PROFILE: profile });
+    expect(names.sort()).toEqual([...DIRECTORY_PROFILE_TOOLS].sort());
+    expect(names).toHaveLength(15);
+    expect(names).not.toContain("execute_python_script");
+    expect(names).not.toContain("delete_td_node");
+  });
+
   it("directory is a non-destructive subset of safe", async () => {
     const directory = await toolNames({ TDMCP_TOOL_PROFILE: "directory" });
     const safe = new Set(await toolNames({ TDMCP_TOOL_PROFILE: "safe" }));

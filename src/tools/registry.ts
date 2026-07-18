@@ -85,6 +85,16 @@ const DIRECTORY_PROFILE_ALLOW = new Set<string>([
   "browse_library",
 ]);
 
+// Temporary fail-closed aliases until the five compact profiles receive their
+// explicit curated memberships in the later profile-policy task.
+const TEMPORARY_DIRECTORY_PROFILE_ALIASES = new Set<string>([
+  "core",
+  "inspect",
+  "build",
+  "show",
+  "library",
+]);
+
 export const runtimeToolRegistrars: ToolRegistrar[] = [
   ...layer3Registrars,
   ...layer2Registrars,
@@ -101,16 +111,19 @@ export function registerToolRegistrars(
   ctx: ToolContext,
   registrars: readonly ToolRegistrar[],
 ): void {
+  const usesDirectoryAllowlist =
+    ctx.toolProfile === "directory" ||
+    (ctx.toolProfile !== undefined && TEMPORARY_DIRECTORY_PROFILE_ALIASES.has(ctx.toolProfile));
   // For filtered profiles, intercept registerTool and drop names in one place.
   // The registrars ignore registerTool's return value, so returning undefined
   // for an excluded name is safe; resources/prompts register later, untouched.
-  if (ctx.toolProfile === "safe" || ctx.toolProfile === "directory") {
+  if (ctx.toolProfile === "safe" || usesDirectoryAllowlist) {
     // biome-ignore lint/suspicious/noExplicitAny: registerTool is overloaded; type the bound copy as variadic so we can forward args.
     const realRegister = server.registerTool.bind(server) as (...args: any[]) => unknown;
     // biome-ignore lint/suspicious/noExplicitAny: forwarding the SDK's variadic registerTool signature.
     (server as any).registerTool = (name: string, ...rest: any[]) => {
       if (ctx.toolProfile === "safe" && SAFE_PROFILE_EXCLUDE.has(name)) return undefined;
-      if (ctx.toolProfile === "directory" && !DIRECTORY_PROFILE_ALLOW.has(name)) {
+      if (usesDirectoryAllowlist && !DIRECTORY_PROFILE_ALLOW.has(name)) {
         return undefined;
       }
       return realRegister(name, ...rest);
