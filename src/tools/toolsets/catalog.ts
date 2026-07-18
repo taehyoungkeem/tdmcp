@@ -53,6 +53,11 @@ interface ScoreCategory {
   allowPrefix: boolean;
 }
 
+interface DiscoveryScore {
+  score: number;
+  reasons: string[];
+}
+
 function compareAscii(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
@@ -93,6 +98,58 @@ function matchedQueryTokens(
   ).length;
 }
 
+function scoreCategories(indexed: IndexedCatalogEntry): readonly ScoreCategory[] {
+  return [
+    {
+      label: "name",
+      ceiling: 600,
+      fields: [indexed.normalizedName],
+      allowPrefix: true,
+    },
+    {
+      label: "alias/tag",
+      ceiling: 350,
+      fields: indexed.normalizedAliasAndTags,
+      allowPrefix: false,
+    },
+    {
+      label: "title",
+      ceiling: 200,
+      fields: [indexed.normalizedTitle],
+      allowPrefix: false,
+    },
+    {
+      label: "summary",
+      ceiling: 100,
+      fields: [indexed.normalizedSummary],
+      allowPrefix: false,
+    },
+  ];
+}
+
+function scoreTextMatch(
+  indexed: IndexedCatalogEntry,
+  normalizedQuery: string,
+  queryTokens: readonly string[],
+): DiscoveryScore {
+  if (indexed.normalizedName === normalizedQuery) {
+    return { score: 1000, reasons: ["exact name"] };
+  }
+  if (indexed.normalizedAliases.includes(normalizedQuery)) {
+    return { score: 1000, reasons: ["exact alias"] };
+  }
+
+  let score = 0;
+  const reasons: string[] = [];
+  for (const category of scoreCategories(indexed)) {
+    const matched = matchedQueryTokens(queryTokens, category.fields, category.allowPrefix);
+    if (matched === 0) continue;
+    score += Math.round(category.ceiling * (matched / queryTokens.length));
+    reasons.push(`${category.label} ${matched}/${queryTokens.length}`);
+  }
+  return { score, reasons };
+}
+
 function presetsFor(name: string): ToolsetPreset[] {
   return PRESETS.filter((preset) => PROFILE_NAME_SETS[preset].has(name));
 }
@@ -108,6 +165,34 @@ function riskAllowed(risk: ToolRisk, requested: DiscoverToolsInput["risk"]): boo
   if (requested === "any") return true;
   if (requested === "read_only") return risk === "read_only";
   return risk === "read_only" || risk === "safe_mutation";
+}
+
+function discoveryCandidate(
+  indexed: IndexedCatalogEntry,
+  input: DiscoverToolsInput,
+  normalizedQuery: string,
+  queryTokens: readonly string[],
+  requestedRisk: DiscoverToolsInput["risk"],
+): DiscoverToolCandidate | undefined {
+  const risk = riskFor(indexed.entry);
+  if (!riskAllowed(risk, requestedRisk)) return undefined;
+
+  const match = scoreTextMatch(indexed, normalizedQuery, queryTokens);
+  if (input.preset && indexed.entry.presets.includes(input.preset)) {
+    match.score += 25;
+    match.reasons.push(`preset ${input.preset}`);
+  }
+  if (match.score === 0) return undefined;
+
+  return {
+    name: indexed.entry.name,
+    summary: indexed.entry.summary,
+    group: indexed.entry.group,
+    presets: [...indexed.entry.presets],
+    risk,
+    score: match.score,
+    reason: match.reasons.join(", "),
+  };
 }
 
 function discoveryLimit(limit: number | undefined): number {
@@ -221,67 +306,14 @@ export class ToolCatalog {
     const candidates: DiscoverToolCandidate[] = [];
 
     for (const indexed of this.#indexed) {
-      const risk = riskFor(indexed.entry);
-      if (!riskAllowed(risk, requestedRisk)) continue;
-
-      const reasons: string[] = [];
-      let score = 0;
-      if (indexed.normalizedName === normalizedQuery) {
-        score = 1000;
-        reasons.push("exact name");
-      } else if (indexed.normalizedAliases.includes(normalizedQuery)) {
-        score = 1000;
-        reasons.push("exact alias");
-      } else {
-        const categories: readonly ScoreCategory[] = [
-          {
-            label: "name",
-            ceiling: 600,
-            fields: [indexed.normalizedName],
-            allowPrefix: true,
-          },
-          {
-            label: "alias/tag",
-            ceiling: 350,
-            fields: indexed.normalizedAliasAndTags,
-            allowPrefix: false,
-          },
-          {
-            label: "title",
-            ceiling: 200,
-            fields: [indexed.normalizedTitle],
-            allowPrefix: false,
-          },
-          {
-            label: "summary",
-            ceiling: 100,
-            fields: [indexed.normalizedSummary],
-            allowPrefix: false,
-          },
-        ];
-        for (const category of categories) {
-          const matched = matchedQueryTokens(queryTokens, category.fields, category.allowPrefix);
-          if (matched === 0) continue;
-          score += Math.round(category.ceiling * (matched / queryTokens.length));
-          reasons.push(`${category.label} ${matched}/${queryTokens.length}`);
-        }
-      }
-
-      if (input.preset && indexed.entry.presets.includes(input.preset)) {
-        score += 25;
-        reasons.push(`preset ${input.preset}`);
-      }
-      if (score === 0) continue;
-
-      candidates.push({
-        name: indexed.entry.name,
-        summary: indexed.entry.summary,
-        group: indexed.entry.group,
-        presets: [...indexed.entry.presets],
-        risk,
-        score,
-        reason: reasons.join(", "),
-      });
+      const candidate = discoveryCandidate(
+        indexed,
+        input,
+        normalizedQuery,
+        queryTokens,
+        requestedRisk,
+      );
+      if (candidate) candidates.push(candidate);
     }
 
     candidates.sort((a, b) => b.score - a.score || compareAscii(a.name, b.name));

@@ -168,6 +168,14 @@ function waitForChildClose(child, timeoutMs) {
   });
 }
 
+function killRecordedProcess(pid) {
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch (error) {
+    if (error?.code !== "ESRCH") throw error;
+  }
+}
+
 async function terminateRecordedChild(child, graceMs) {
   const pid = child?.pid;
   const cleanup = { pid: pid ?? null, wasRunning: false, forced: false, closed: true };
@@ -178,11 +186,7 @@ async function terminateRecordedChild(child, graceMs) {
   if (await waitForChildClose(child, graceMs)) return cleanup;
 
   cleanup.forced = true;
-  try {
-    process.kill(pid, "SIGKILL");
-  } catch (error) {
-    if (error?.code !== "ESRCH") throw error;
-  }
+  killRecordedProcess(pid);
   cleanup.closed = await waitForChildClose(child, CHILD_TERMINATION_GRACE_MS);
   return cleanup;
 }
@@ -333,7 +337,21 @@ function countStatuses(checks) {
   return counts;
 }
 
-function analyzeResults() {
+function readScenarioResult(checksPath, scenario) {
+  const checks = JSON.parse(readFileSync(checksPath, "utf8"));
+  assert.ok(Array.isArray(checks), `${checksPath}: expected a top-level array`);
+  assert.ok(checks.length > 0, `${checksPath}: expected at least one check`);
+  for (const check of checks) assertCheck(check, checksPath);
+  return {
+    scenario,
+    baseline: EXPECTED_FAILURE_SCENARIOS.includes(scenario),
+    checksFile: relative(repoRoot, checksPath),
+    countsByStatus: countStatuses(checks),
+    checks,
+  };
+}
+
+function collectScenarioResults() {
   const checksFiles = findChecksFiles(outputDirectory);
   assert.equal(checksFiles.length, 30, "Expected exactly 30 recursive checks.json files");
 
@@ -342,17 +360,8 @@ function analyzeResults() {
     const scenario = scenarioFromChecksPath(checksPath);
     assert.ok(ACTIVE_SCENARIOS.includes(scenario), `Unexpected active scenario: ${scenario}`);
     assert.equal(resultByScenario.has(scenario), false, `Duplicate scenario result: ${scenario}`);
-    const checks = JSON.parse(readFileSync(checksPath, "utf8"));
-    assert.ok(Array.isArray(checks), `${checksPath}: expected a top-level array`);
-    assert.ok(checks.length > 0, `${checksPath}: expected at least one check`);
-    for (const check of checks) assertCheck(check, checksPath);
-    resultByScenario.set(scenario, {
-      scenario,
-      baseline: EXPECTED_FAILURE_SCENARIOS.includes(scenario),
-      checksFile: relative(repoRoot, checksPath),
-      countsByStatus: countStatuses(checks),
-      checks,
-    });
+    const result = readScenarioResult(checksPath, scenario);
+    resultByScenario.set(result.scenario, result);
   }
 
   assert.equal(resultByScenario.size, 30, "Expected exactly 30 unique scenario results");
@@ -361,38 +370,59 @@ function analyzeResults() {
     [...ACTIVE_SCENARIOS].sort(),
     "Executed active scenarios differ from the pinned 30-scenario contract",
   );
+  return resultByScenario;
+}
 
+function reconcileExpectedFailures(resultByScenario) {
   const baselineExecuted = [];
   const baselineFailed = [];
   const baselineStale = [];
-  const nonBaselineClean = [];
-  const nonBaselineFailures = [];
   for (const scenario of EXPECTED_FAILURE_SCENARIOS) {
     const result = resultByScenario.get(scenario);
     if (result) baselineExecuted.push(scenario);
     if (result?.countsByStatus.FAILURE > 0) baselineFailed.push(scenario);
     else baselineStale.push(scenario);
   }
+  return { executed: baselineExecuted, failed: baselineFailed, stale: baselineStale };
+}
+
+function isCleanScenarioResult(result) {
+  return (
+    result !== undefined &&
+    result.countsByStatus.SUCCESS > 0 &&
+    result.countsByStatus.FAILURE === 0 &&
+    result.countsByStatus.WARNING === 0
+  );
+}
+
+function reconcileExpectedPasses(resultByScenario) {
+  const nonBaselineClean = [];
+  const nonBaselineFailures = [];
   for (const scenario of EXPECTED_PASS_SCENARIOS) {
     const result = resultByScenario.get(scenario);
-    const clean =
-      result &&
-      result.countsByStatus.SUCCESS > 0 &&
-      result.countsByStatus.FAILURE === 0 &&
-      result.countsByStatus.WARNING === 0;
-    if (clean) nonBaselineClean.push(scenario);
+    if (isCleanScenarioResult(result)) nonBaselineClean.push(scenario);
     else nonBaselineFailures.push(scenario);
   }
+  return { clean: nonBaselineClean, failedOrWarning: nonBaselineFailures };
+}
 
-  assert.equal(baselineExecuted.length, 20, "Every baseline scenario must execute");
-  assert.equal(baselineFailed.length, 20, "Every baseline scenario must contain a real failure");
-  assert.deepEqual(baselineStale, [], "Passing or non-failing baseline entries are stale");
-  assert.equal(nonBaselineClean.length, 10, "All ten non-baseline scenarios must pass cleanly");
+function assertReconciliation(baseline, nonBaseline) {
+  assert.equal(baseline.executed.length, 20, "Every baseline scenario must execute");
+  assert.equal(baseline.failed.length, 20, "Every baseline scenario must contain a real failure");
+  assert.deepEqual(baseline.stale, [], "Passing or non-failing baseline entries are stale");
+  assert.equal(nonBaseline.clean.length, 10, "All ten non-baseline scenarios must pass cleanly");
   assert.deepEqual(
-    nonBaselineFailures,
+    nonBaseline.failedOrWarning,
     [],
     "Non-baseline scenarios must have SUCCESS and no FAILURE or WARNING",
   );
+}
+
+function analyzeResults() {
+  const resultByScenario = collectScenarioResults();
+  const baseline = reconcileExpectedFailures(resultByScenario);
+  const nonBaseline = reconcileExpectedPasses(resultByScenario);
+  assertReconciliation(baseline, nonBaseline);
 
   const allChecks = [...resultByScenario.values()].flatMap((result) => result.checks);
   const countsByStatus = countStatuses(allChecks);
@@ -404,17 +434,14 @@ function analyzeResults() {
     reconciliation: {
       baseline: {
         expected: EXPECTED_FAILURE_SCENARIOS,
-        executed: baselineExecuted,
-        failed: baselineFailed,
-        stale: baselineStale,
+        ...baseline,
         unexecuted: EXPECTED_FAILURE_SCENARIOS.filter(
-          (scenario) => !baselineExecuted.includes(scenario),
+          (scenario) => !baseline.executed.includes(scenario),
         ),
       },
       nonBaseline: {
         expected: EXPECTED_PASS_SCENARIOS,
-        clean: nonBaselineClean,
-        failedOrWarning: nonBaselineFailures,
+        ...nonBaseline,
         unexecuted: EXPECTED_PASS_SCENARIOS.filter((scenario) => !resultByScenario.has(scenario)),
       },
     },
@@ -425,11 +452,8 @@ async function writeSummary(summary) {
   await writeFile(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
 }
 
-async function main() {
-  await rm(outputDirectory, { recursive: true, force: true });
-  await mkdir(outputDirectory, { recursive: true });
-
-  const summary = {
+function createSummary() {
+  return {
     status: "running",
     mode: auditUnbaselined ? "audit-unbaselined" : "reconciled",
     verifier: {
@@ -447,70 +471,107 @@ async function main() {
     cleanup: { conformance: null, server: null },
     error: null,
   };
+}
 
-  let server;
-  let conformance;
+async function prepareOutputDirectory() {
+  await rm(outputDirectory, { recursive: true, force: true });
+  await mkdir(outputDirectory, { recursive: true });
+}
+
+async function writeRunnerOutput(cli) {
+  await writeFile(resolve(outputDirectory, "runner.stdout.txt"), cli.stdout, "utf8");
+  await writeFile(resolve(outputDirectory, "runner.stderr.txt"), cli.stderr, "utf8");
+}
+
+function recordCliSummary(summary, cli) {
+  summary.cli = {
+    exitCode: cli.code,
+    signal: cli.signal,
+    timedOut: cli.timedOut,
+    arguments: cli.arguments,
+  };
+}
+
+function recordAnalysis(summary, analysis) {
+  summary.countsByStatus = analysis.countsByStatus;
+  summary.scenarios = analysis.scenarios;
+  summary.reconciliation = analysis.reconciliation;
+}
+
+function assertCliOutcome(summary, cli) {
+  if (auditUnbaselined) {
+    assert.equal(cli.code, 1, "Unbaselined audit must exit 1 for the 20 fixture failures");
+    summary.status = "audit-verified";
+    process.exitCode = cli.code ?? 1;
+    return;
+  }
+  assert.equal(cli.code, 0, `Reconciled Conformance CLI exited with code ${cli.code}`);
+  summary.status = "passed";
+}
+
+async function executeConformanceRun(summary, state) {
+  assertPinnedInputs();
+  assertFixtureBaseline();
+  const port = await reserveLoopbackPort();
+  const url = `http://127.0.0.1:${port}/mcp`;
+  state.server = spawnServer(port);
+  summary.server = { pid: state.server.child.pid ?? null, url, ready: false };
+  await waitForReady(url, state.server);
+  summary.server.ready = true;
+
+  state.conformance = runConformance(url);
+  const cli = await state.conformance.completion;
+  await writeRunnerOutput(cli);
+  recordCliSummary(summary, cli);
+  assert.equal(cli.timedOut, false, `Conformance timed out after ${CONFORMANCE_TIMEOUT_MS}ms`);
+  assert.equal(cli.signal, null, `Conformance exited on signal ${cli.signal}`);
+  recordAnalysis(summary, analyzeResults());
+  assertCliOutcome(summary, cli);
+}
+
+function inactiveCleanup(child) {
+  return {
+    pid: child?.pid ?? null,
+    wasRunning: false,
+    forced: false,
+    closed: true,
+  };
+}
+
+async function cleanupConformance(conformance) {
+  if (conformance && isChildAlive(conformance.child)) {
+    return terminateRecordedChild(conformance.child, CHILD_TERMINATION_GRACE_MS);
+  }
+  return inactiveCleanup(conformance?.child);
+}
+
+async function cleanupRun(summary, state) {
+  summary.cleanup.conformance = await cleanupConformance(state.conformance);
+  summary.cleanup.server = await terminateRecordedChild(
+    state.server?.child,
+    SERVER_TERMINATION_GRACE_MS,
+  );
+  await writeSummary(summary);
+}
+
+function recordFailure(summary, error) {
+  summary.status = "failed";
+  summary.error = error instanceof Error ? error.message : String(error);
+  process.exitCode = 1;
+}
+
+async function main() {
+  await prepareOutputDirectory();
+  const summary = createSummary();
+  const state = { server: undefined, conformance: undefined };
   let pendingError;
   try {
-    assertPinnedInputs();
-    assertFixtureBaseline();
-    const port = await reserveLoopbackPort();
-    const url = `http://127.0.0.1:${port}/mcp`;
-    server = spawnServer(port);
-    summary.server = { pid: server.child.pid ?? null, url, ready: false };
-    await waitForReady(url, server);
-    summary.server.ready = true;
-
-    conformance = runConformance(url);
-    const cli = await conformance.completion;
-    await writeFile(resolve(outputDirectory, "runner.stdout.txt"), cli.stdout, "utf8");
-    await writeFile(resolve(outputDirectory, "runner.stderr.txt"), cli.stderr, "utf8");
-    summary.cli = {
-      exitCode: cli.code,
-      signal: cli.signal,
-      timedOut: cli.timedOut,
-      arguments: cli.arguments,
-    };
-    assert.equal(cli.timedOut, false, `Conformance timed out after ${CONFORMANCE_TIMEOUT_MS}ms`);
-    assert.equal(cli.signal, null, `Conformance exited on signal ${cli.signal}`);
-
-    const analysis = analyzeResults();
-    summary.countsByStatus = analysis.countsByStatus;
-    summary.scenarios = analysis.scenarios;
-    summary.reconciliation = analysis.reconciliation;
-
-    if (auditUnbaselined) {
-      assert.equal(cli.code, 1, "Unbaselined audit must exit 1 for the 20 fixture failures");
-      summary.status = "audit-verified";
-      process.exitCode = cli.code ?? 1;
-    } else {
-      assert.equal(cli.code, 0, `Reconciled Conformance CLI exited with code ${cli.code}`);
-      summary.status = "passed";
-    }
+    await executeConformanceRun(summary, state);
   } catch (error) {
     pendingError = error;
-    summary.status = "failed";
-    summary.error = error instanceof Error ? error.message : String(error);
-    process.exitCode = 1;
+    recordFailure(summary, error);
   } finally {
-    if (conformance && isChildAlive(conformance.child)) {
-      summary.cleanup.conformance = await terminateRecordedChild(
-        conformance.child,
-        CHILD_TERMINATION_GRACE_MS,
-      );
-    } else {
-      summary.cleanup.conformance = {
-        pid: conformance?.child.pid ?? null,
-        wasRunning: false,
-        forced: false,
-        closed: true,
-      };
-    }
-    summary.cleanup.server = await terminateRecordedChild(
-      server?.child,
-      SERVER_TERMINATION_GRACE_MS,
-    );
-    await writeSummary(summary);
+    await cleanupRun(summary, state);
   }
 
   if (pendingError) throw pendingError;

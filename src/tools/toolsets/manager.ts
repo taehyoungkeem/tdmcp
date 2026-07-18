@@ -144,28 +144,56 @@ export class ToolsetManager implements ToolsetController {
     const catalog = this.#catalogForUse();
     const selection = this.#resolveSelection(input, catalog);
     const requested = new Set(selection.names);
+    const targetNames = this.#targetNamesForSelection(selection, requested);
+    this.#assertKnownTools(requested, catalog);
+    this.#assertRiskPolicy(selection, this.#riskyTools(requested, catalog));
+    this.#assertCapturedTools(targetNames);
+
+    this.#validateBudgets(targetNames, catalog, false);
+    const target = this.#targetState(targetNames);
+    const nextProfile: ToolProfileState =
+      selection.mode === "add" ? "custom" : (selection.preset ?? "custom");
+    return this.#transitionTo(target, nextProfile, catalog);
+  }
+
+  #targetNamesForSelection(
+    selection: ResolvedSelection,
+    requested: ReadonlySet<string>,
+  ): Set<string> {
     const targetNames = selection.mode === "add" ? new Set(this.#activeNames()) : new Set<string>();
     for (const name of requested) targetNames.add(name);
     for (const name of PROTECTED_CORE_TOOL_NAMES) targetNames.add(name);
+    return targetNames;
+  }
 
+  #assertKnownTools(requested: ReadonlySet<string>, catalog: ToolCatalog): void {
     const unknown = [...requested]
       .filter((name) => !catalog.get(name) && !RAW_CODE_NAME_SET.has(name))
       .sort(compareAscii);
-    if (unknown.length > 0) {
-      const closeMatches: string[] = [];
-      for (const name of unknown) {
-        for (const suggestion of catalog.suggest(name, 5)) {
-          if (!closeMatches.includes(suggestion)) closeMatches.push(suggestion);
-          if (closeMatches.length === 5) break;
-        }
-        if (closeMatches.length === 5) break;
-      }
-      throw new ToolsetError("unknown_tool", "Toolset selection includes unknown tools.", {
-        close_matches: closeMatches,
-      });
-    }
+    if (unknown.length === 0) return;
+    throw new ToolsetError("unknown_tool", "Toolset selection includes unknown tools.", {
+      close_matches: this.#closeMatches(unknown, catalog),
+    });
+  }
 
-    const riskyTools = [...requested]
+  #closeMatches(unknown: readonly string[], catalog: ToolCatalog): string[] {
+    const closeMatches: string[] = [];
+    for (const name of unknown) {
+      if (this.#appendUniqueSuggestions(closeMatches, catalog.suggest(name, 5))) break;
+    }
+    return closeMatches;
+  }
+
+  #appendUniqueSuggestions(closeMatches: string[], suggestions: readonly string[]): boolean {
+    for (const suggestion of suggestions) {
+      if (!closeMatches.includes(suggestion)) closeMatches.push(suggestion);
+      if (closeMatches.length === 5) return true;
+    }
+    return false;
+  }
+
+  #riskyTools(requested: ReadonlySet<string>, catalog: ToolCatalog): string[] {
+    return [...requested]
       .filter((name) => {
         const entry = catalog.get(name);
         return (
@@ -173,6 +201,9 @@ export class ToolsetManager implements ToolsetController {
         );
       })
       .sort(compareAscii);
+  }
+
+  #assertRiskPolicy(selection: ResolvedSelection, riskyTools: string[]): void {
     if (riskyTools.length > 0 && (!selection.explicit || !selection.includeRisky)) {
       throw new ToolsetError(
         "risky_tool_requires_explicit_opt_in",
@@ -187,15 +218,12 @@ export class ToolsetManager implements ToolsetController {
         raw_tools: rawTools,
       });
     }
+  }
+
+  #assertCapturedTools(targetNames: ReadonlySet<string>): void {
     if ([...targetNames].some((name) => !this.#handles.has(name))) {
       throw new ToolsetError("invalid_selection", "Toolset selection is invalid.");
     }
-
-    this.#validateBudgets(targetNames, catalog, false);
-    const target = this.#targetState(targetNames);
-    const nextProfile: ToolProfileState =
-      selection.mode === "add" ? "custom" : (selection.preset ?? "custom");
-    return this.#transitionTo(target, nextProfile, catalog);
   }
 
   #resetNow(): ToolsetTransitionOutput {
@@ -357,18 +385,20 @@ export class ToolsetManager implements ToolsetController {
     profile: ToolsetManagerOptions["startupProfile"],
     catalog: ToolCatalog,
   ): string[] {
-    const names = new Set<string>();
-    if (profile === "full") {
-      for (const name of this.#handles.keys()) names.add(name);
-    } else if (ORDINARY_PRESET_SET.has(profile)) {
-      for (const name of catalog.namesForPreset(profile as ToolsetPreset)) names.add(name);
-    } else {
-      for (const name of this.#handles.keys()) {
-        if (staticProfileAllows(name, profile)) names.add(name);
-      }
-    }
+    const names = new Set(this.#baseNamesForProfile(profile, catalog));
     for (const name of PROTECTED_CORE_TOOL_NAMES) names.add(name);
     return [...names].sort(compareAscii);
+  }
+
+  #baseNamesForProfile(
+    profile: ToolsetManagerOptions["startupProfile"],
+    catalog: ToolCatalog,
+  ): Iterable<string> {
+    if (profile === "full") return this.#handles.keys();
+    if (ORDINARY_PRESET_SET.has(profile)) {
+      return catalog.namesForPreset(profile as ToolsetPreset);
+    }
+    return [...this.#handles.keys()].filter((name) => staticProfileAllows(name, profile));
   }
 
   #targetState(names: ReadonlySet<string> | readonly string[]): Map<string, boolean> {

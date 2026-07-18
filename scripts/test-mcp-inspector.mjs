@@ -146,6 +146,40 @@ function invokeInspector(label, args) {
   });
 }
 
+function findManagementTool(tools, name) {
+  const tool = tools.find((candidate) => candidate.name === name);
+  assert.ok(tool, `Missing management tool: ${name}`);
+  return tool;
+}
+
+function assertManagementToolSchema(tool) {
+  assert.equal(tool.inputSchema?.type, "object", `${tool.name} input must be a root object`);
+  assert.equal(tool.outputSchema?.type, "object", `${tool.name} output must be a root object`);
+  assert.deepEqual(tool.outputSchema?.required, ["ok"], `${tool.name} must require ok`);
+  assert.equal(
+    tool.outputSchema?.additionalProperties,
+    false,
+    `${tool.name} output must reject unknown fields`,
+  );
+  assert.equal(tool.annotations?.destructiveHint, false);
+  assert.equal(tool.annotations?.openWorldHint, false);
+}
+
+function assertDiscoverSchema(discover) {
+  assert.deepEqual(discover.inputSchema?.required, ["query"]);
+  assert.equal(discover.outputSchema?.properties?.candidates?.type, "array");
+}
+
+function assertSelectSchema(select) {
+  const presets = select.inputSchema?.properties?.preset?.enum;
+  assert.deepEqual(presets, SELECTABLE_PRESETS);
+  assert.equal(presets.includes("full"), false);
+}
+
+function assertEmptyInputSchema(tool) {
+  assert.deepEqual(tool.inputSchema?.properties, {});
+}
+
 function assertManagementSchemas(tools) {
   const managementTools = tools.filter((tool) => MANAGEMENT_TOOL_NAMES.includes(tool.name));
   assert.deepEqual(
@@ -153,30 +187,12 @@ function assertManagementSchemas(tools) {
     [...MANAGEMENT_TOOL_NAMES].sort(),
   );
 
-  for (const tool of managementTools) {
-    assert.equal(tool.inputSchema?.type, "object", `${tool.name} input must be a root object`);
-    assert.equal(tool.outputSchema?.type, "object", `${tool.name} output must be a root object`);
-    assert.deepEqual(tool.outputSchema?.required, ["ok"], `${tool.name} must require ok`);
-    assert.equal(
-      tool.outputSchema?.additionalProperties,
-      false,
-      `${tool.name} output must reject unknown fields`,
-    );
-    assert.equal(tool.annotations?.destructiveHint, false);
-    assert.equal(tool.annotations?.openWorldHint, false);
-  }
-
-  const discover = managementTools.find((tool) => tool.name === "discover_tools");
-  assert.deepEqual(discover?.inputSchema?.required, ["query"]);
-  assert.equal(discover?.outputSchema?.properties?.candidates?.type, "array");
-
-  const select = managementTools.find((tool) => tool.name === "select_toolset");
-  assert.deepEqual(select?.inputSchema?.properties?.preset?.enum, SELECTABLE_PRESETS);
-  assert.equal(select.inputSchema.properties.preset.enum.includes("full"), false);
+  for (const tool of managementTools) assertManagementToolSchema(tool);
+  assertDiscoverSchema(findManagementTool(managementTools, "discover_tools"));
+  assertSelectSchema(findManagementTool(managementTools, "select_toolset"));
 
   for (const name of ["get_active_toolset", "reset_toolset"]) {
-    const tool = managementTools.find((candidate) => candidate.name === name);
-    assert.deepEqual(tool?.inputSchema?.properties, {});
+    assertEmptyInputSchema(findManagementTool(managementTools, name));
   }
 }
 

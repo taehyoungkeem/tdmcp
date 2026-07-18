@@ -158,160 +158,220 @@ interface EntryReport {
   ms?: number;
 }
 
+type MacroRecord = Awaited<ReturnType<typeof readMacro>>;
+type MacroEntry = MacroRecord["entries"][number];
+type MacroOverrides = NonNullable<RunMacroScriptArgs["argsOverrides"]>;
+
+interface ReplayState {
+  report: EntryReport[];
+  ran: number;
+  okCount: number;
+  failed: number;
+  skipped: number;
+  halted: boolean;
+}
+
+type LoadedMacro = { ok: true; record: MacroRecord } | { ok: false; result: CallToolResult };
+
+type ResolvedDispatchTarget =
+  | { ok: true; target: MacroDispatchTarget }
+  | { ok: false; reason: NonNullable<EntryReport["skipped"]> };
+
+interface EntryExecution {
+  report: EntryReport;
+  failed: boolean;
+}
+
+function macroLoadError(err: unknown): CallToolResult {
+  if (err && typeof err === "object" && "issues" in err) {
+    const issues = (err as { issues: Array<{ path: (string | number)[]; message: string }> })
+      .issues;
+    const summary = issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`).join("; ");
+    return errorResult(`invalid macro file: ${summary}`);
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return errorResult(`failed to load macro: ${msg}`);
+}
+
+async function loadMacroRecord(file: string): Promise<LoadedMacro> {
+  try {
+    return { ok: true, record: await readMacro(file) };
+  } catch (err) {
+    return { ok: false, result: macroLoadError(err) };
+  }
+}
+
+function dryRunResult(record: MacroRecord): CallToolResult {
+  const entries: EntryReport[] = record.entries.map((entry, index) => ({
+    index,
+    tool: entry.tool,
+    ok: true,
+  }));
+  return structuredResult(`dry-run: ${entries.length} entries planned for ${record.name}`, {
+    status: "dry-run",
+    name: record.name,
+    total: entries.length,
+    ran: 0,
+    ok: 0,
+    failed: 0,
+    skipped: 0,
+    entries,
+  });
+}
+
+function createReplayState(): ReplayState {
+  return { report: [], ran: 0, okCount: 0, failed: 0, skipped: 0, halted: false };
+}
+
+function recordSkip(
+  state: ReplayState,
+  stopOnError: boolean,
+  index: number,
+  tool: string,
+  reason: NonNullable<EntryReport["skipped"]>,
+): boolean {
+  state.report.push({ index, tool, ok: false, skipped: reason });
+  state.skipped += 1;
+  if (!stopOnError) return false;
+  state.halted = true;
+  return true;
+}
+
+function resolveDispatchTarget(handlers: HandlerMap, tool: string): ResolvedDispatchTarget {
+  if (isRawPythonTool(tool)) return { ok: false, reason: "raw-python-blocked" };
+  const target = handlers.get(tool);
+  if (!target) return { ok: false, reason: "unknown-tool" };
+  if (target.rawCode) return { ok: false, reason: "raw-python-blocked" };
+  if (target.annotations?.destructiveHint === true) {
+    return { ok: false, reason: "destructive-tool-blocked" };
+  }
+  if (!target.isActive()) return { ok: false, reason: "inactive-tool" };
+  return { ok: true, target };
+}
+
+function parseEntryArgs(target: MacroDispatchTarget, entry: MacroEntry, overrides: MacroOverrides) {
+  const override = overrides[entry.tool];
+  const mergedArgs = override ? { ...entry.args, ...override } : entry.args;
+  return target.inputSchema.safeParse(mergedArgs);
+}
+
+async function invokeMacroTarget(
+  target: MacroDispatchTarget,
+  parsedArgs: unknown,
+  index: number,
+  tool: string,
+): Promise<EntryExecution> {
+  const t0 = Date.now();
+  try {
+    const handler = target.handler;
+    const result = await handler(parsedArgs);
+    const ms = Date.now() - t0;
+    const isError = result.isError === true;
+    return {
+      report: {
+        index,
+        tool,
+        ok: !isError,
+        summary: summarizeResult(result),
+        ms,
+      },
+      failed: isError,
+    };
+  } catch (err) {
+    const ms = Date.now() - t0;
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      report: {
+        index,
+        tool,
+        ok: false,
+        summary: `error: ${msg}`.slice(0, 240),
+        ms,
+      },
+      failed: true,
+    };
+  }
+}
+
+function recordExecution(
+  state: ReplayState,
+  execution: EntryExecution,
+  stopOnError: boolean,
+): boolean {
+  state.report.push(execution.report);
+  state.ran += 1;
+  if (!execution.failed) {
+    state.okCount += 1;
+    return false;
+  }
+  state.failed += 1;
+  if (!stopOnError) return false;
+  state.halted = true;
+  return true;
+}
+
+async function replayEntry(
+  state: ReplayState,
+  handlers: HandlerMap,
+  overrides: MacroOverrides,
+  entry: MacroEntry,
+  index: number,
+  stopOnError: boolean,
+): Promise<boolean> {
+  const resolved = resolveDispatchTarget(handlers, entry.tool);
+  if (!resolved.ok) {
+    return recordSkip(state, stopOnError, index, entry.tool, resolved.reason);
+  }
+
+  const parsed = parseEntryArgs(resolved.target, entry, overrides);
+  if (!parsed.success) {
+    return recordSkip(state, stopOnError, index, entry.tool, "invalid-arguments");
+  }
+
+  const execution = await invokeMacroTarget(resolved.target, parsed.data, index, entry.tool);
+  return recordExecution(state, execution, stopOnError);
+}
+
+async function replayMacroRecord(
+  record: MacroRecord,
+  handlers: HandlerMap,
+  args: RunMacroScriptArgs,
+): Promise<CallToolResult> {
+  const state = createReplayState();
+  const overrides = args.argsOverrides ?? {};
+  for (let index = 0; index < record.entries.length; index += 1) {
+    // biome-ignore lint/style/noNonNullAssertion: loop bounded by length.
+    const entry = record.entries[index]!;
+    if (await replayEntry(state, handlers, overrides, entry, index, args.stopOnError)) break;
+  }
+
+  const status = state.halted ? "halted" : "replayed";
+  return structuredResult(
+    `${status}: ${state.okCount}/${record.entries.length} ok, ${state.failed} failed, ${state.skipped} skipped (${record.name})`,
+    {
+      status,
+      name: record.name,
+      total: record.entries.length,
+      ran: state.ran,
+      ok: state.okCount,
+      failed: state.failed,
+      skipped: state.skipped,
+      entries: state.report,
+    },
+  );
+}
+
 export async function runMacroScriptImpl(
   ctx: ToolContext,
   args: RunMacroScriptArgs,
 ): Promise<CallToolResult> {
   const dir = resolveMacrosDir();
   const file = resolveMacroFile(args.macroPath, dir);
-
-  let record: Awaited<ReturnType<typeof readMacro>>;
-  try {
-    record = await readMacro(file);
-  } catch (err) {
-    if (err && typeof err === "object" && "issues" in err) {
-      const issues = (err as { issues: Array<{ path: (string | number)[]; message: string }> })
-        .issues;
-      const summary = issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`).join("; ");
-      return errorResult(`invalid macro file: ${summary}`);
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    return errorResult(`failed to load macro: ${msg}`);
-  }
-
-  const total = record.entries.length;
-
-  if (args.dryRun) {
-    const entries: EntryReport[] = record.entries.map((e, i) => ({
-      index: i,
-      tool: e.tool,
-      ok: true,
-    }));
-    return structuredResult(`dry-run: ${total} entries planned for ${record.name}`, {
-      status: "dry-run",
-      name: record.name,
-      total,
-      ran: 0,
-      ok: 0,
-      failed: 0,
-      skipped: 0,
-      entries,
-    });
-  }
-
+  const loaded = await loadMacroRecord(file);
+  if (!loaded.ok) return loaded.result;
+  if (args.dryRun) return dryRunResult(loaded.record);
   const handlers = await getOrBuildToolHandlers(ctx);
-  const overrides = args.argsOverrides ?? {};
-  const report: EntryReport[] = [];
-  let ran = 0;
-  let okCount = 0;
-  let failed = 0;
-  let skipped = 0;
-  let halted = false;
-
-  const recordSkip = (index: number, tool: string, reason: NonNullable<EntryReport["skipped"]>) => {
-    report.push({ index, tool, ok: false, skipped: reason });
-    skipped++;
-    if (args.stopOnError) {
-      halted = true;
-      return true;
-    }
-    return false;
-  };
-
-  for (let i = 0; i < record.entries.length; i++) {
-    // biome-ignore lint/style/noNonNullAssertion: loop bounded by length.
-    const entry = record.entries[i]!;
-
-    if (isRawPythonTool(entry.tool)) {
-      if (recordSkip(i, entry.tool, "raw-python-blocked")) break;
-      continue;
-    }
-
-    const target = handlers.get(entry.tool);
-    if (!target) {
-      if (recordSkip(i, entry.tool, "unknown-tool")) break;
-      continue;
-    }
-
-    if (target.rawCode) {
-      if (recordSkip(i, entry.tool, "raw-python-blocked")) break;
-      continue;
-    }
-
-    if (target.annotations?.destructiveHint === true) {
-      if (recordSkip(i, entry.tool, "destructive-tool-blocked")) break;
-      continue;
-    }
-
-    if (!target.isActive()) {
-      if (recordSkip(i, entry.tool, "inactive-tool")) break;
-      continue;
-    }
-
-    const override = overrides[entry.tool];
-    const mergedArgs = override ? { ...entry.args, ...override } : entry.args;
-    const parsed = target.inputSchema.safeParse(mergedArgs);
-    if (!parsed.success) {
-      if (recordSkip(i, entry.tool, "invalid-arguments")) break;
-      continue;
-    }
-
-    const t0 = Date.now();
-    try {
-      const handler = target.handler;
-      const res = await handler(parsed.data);
-      const ms = Date.now() - t0;
-      const isErr = res.isError === true;
-      report.push({
-        index: i,
-        tool: entry.tool,
-        ok: !isErr,
-        summary: summarizeResult(res),
-        ms,
-      });
-      ran++;
-      if (isErr) {
-        failed++;
-        if (args.stopOnError) {
-          halted = true;
-          break;
-        }
-      } else {
-        okCount++;
-      }
-    } catch (err) {
-      const ms = Date.now() - t0;
-      const msg = err instanceof Error ? err.message : String(err);
-      report.push({
-        index: i,
-        tool: entry.tool,
-        ok: false,
-        summary: `error: ${msg}`.slice(0, 240),
-        ms,
-      });
-      ran++;
-      failed++;
-      if (args.stopOnError) {
-        halted = true;
-        break;
-      }
-    }
-  }
-
-  const status = halted ? "halted" : "replayed";
-  return structuredResult(
-    `${status}: ${okCount}/${total} ok, ${failed} failed, ${skipped} skipped (${record.name})`,
-    {
-      status,
-      name: record.name,
-      total,
-      ran,
-      ok: okCount,
-      failed,
-      skipped,
-      entries: report,
-    },
-  );
+  return replayMacroRecord(loaded.record, handlers, args);
 }
 
 export const registerRunMacroScript: ToolRegistrar = (server, ctx) => {
