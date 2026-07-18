@@ -534,6 +534,12 @@ suite instead.
 The harness uses a local built package and does not download floating `latest`
 packages during CI.
 
+Every active GitHub Actions workflow that runs `npm ci` first runs the dependency
+install-script allowlist checker in a separate no-install job, and each installing
+job explicitly depends on that gate. The invariant covers main CI, code quality,
+documentation, live probes, and release workflows; a repository test parses all
+workflow files so the scope cannot silently regress to one workflow.
+
 Inspector CLI `0.22.0` requires explicit CLI mode. The executable contract is:
 
 ```text

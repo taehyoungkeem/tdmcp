@@ -1938,6 +1938,11 @@ rtk git commit -m "test: add bilingual tool discovery eval"
 - Modify: `package.json`
 - Modify: `package-lock.json`
 - Modify: `.github/workflows/ci.yml`
+- Modify: `.github/workflows/code-quality.yml`
+- Modify: `.github/workflows/docs.yml`
+- Modify: `.github/workflows/probe-live.yml`
+- Modify: `.github/workflows/release.yml`
+- Modify: `tests/unit/packageInstallMetadata.test.ts`
 
 **Interfaces:**
 - Consumes: built `dist/index.js`, local `mcp-inspector-cli`, core/dynamic environment, and independent stdio processes.
@@ -2048,7 +2053,13 @@ Add the job to `ci-success.needs`, environment result mapping, and required resu
 Add a required no-install CI job that runs
 `node scripts/check-install-script-allowlist.mjs` immediately after checkout and
 before any `npm ci`; this makes lockfile/allowlist drift fail before lifecycle
-scripts execute.
+scripts execute. This requirement is repository-wide, not limited to `ci.yml`.
+Add the same no-install gate to `code-quality.yml`, `docs.yml`, `probe-live.yml`,
+and `release.yml`, and make every job containing `npm ci` depend on its workflow's
+gate. Extend `tests/unit/packageInstallMetadata.test.ts` to parse every active
+workflow and assert that each workflow containing `npm ci` defines the exact gate
+and every installing job declares `needs: install-script-allowlist`. This prevents
+the security check from silently narrowing back to one workflow.
 
 - [ ] **Step 5: Run lint and commit the Inspector harness**
 
@@ -2059,7 +2070,8 @@ rtk proxy ./node_modules/.bin/biome check scripts/test-mcp-inspector.mjs
 rtk npm run test:mcp:inspector
 rtk git diff --check
 rtk npm run deps:install-scripts:check
-rtk git add package.json package-lock.json scripts/test-mcp-inspector.mjs scripts/check-install-script-allowlist.mjs .github/workflows/ci.yml
+rtk test node scripts/run-vitest.mjs run tests/unit/packageInstallMetadata.test.ts
+rtk git add package.json package-lock.json scripts/test-mcp-inspector.mjs scripts/check-install-script-allowlist.mjs .github/workflows/ci.yml .github/workflows/code-quality.yml .github/workflows/docs.yml .github/workflows/probe-live.yml .github/workflows/release.yml tests/unit/packageInstallMetadata.test.ts
 rtk git commit -m "test: add pinned MCP Inspector contracts"
 ```
 
