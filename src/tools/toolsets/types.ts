@@ -1,4 +1,4 @@
-import type { RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer, RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolProfile } from "../../utils/config.js";
 import type { ToolRegistrar } from "../types.js";
@@ -107,6 +107,14 @@ export interface ToolsetController {
   select(input: SelectToolsetInput): Promise<ToolsetTransitionOutput>;
   getActive(): ActiveToolsetOutput;
   reset(): Promise<ToolsetTransitionOutput>;
+}
+
+export interface ToolsetManagerOptions {
+  server: McpServer;
+  startupProfile: ToolProfile;
+  maxActive: number;
+  metadataBudgetBytes: number;
+  allowRawPython: boolean;
 }
 
 export interface GeneratedToolMetadataEntry {
