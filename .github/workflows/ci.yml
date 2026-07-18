@@ -19,10 +19,24 @@ env:
   NPM_CONFIG_FUND: "false"
 
 jobs:
+  # Security invariant: every job that runs npm ci must depend on this no-install gate.
+  install-script-allowlist:
+    name: Install Script Allowlist
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Check dependency install-script allowlist
+        run: node scripts/check-install-script-allowlist.mjs
+
   unit-tests:
     name: Unit Tests (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    needs: install-script-allowlist
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +65,7 @@ jobs:
     name: Build and MCPB Package
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: install-script-allowlist
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -102,6 +117,7 @@ jobs:
     name: Raw Exec OFF Smoke
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: install-script-allowlist
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -125,6 +141,7 @@ jobs:
     name: Creative RAG Multilingual Smoke
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: install-script-allowlist
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -151,6 +168,7 @@ jobs:
     name: Coverage Gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: install-script-allowlist
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -171,37 +189,71 @@ jobs:
       - name: Test + coverage gate
         run: npm run test:coverage
 
+  mcp-inspector-contract:
+    name: MCP Inspector Contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: install-script-allowlist
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Import knowledge base
+        run: npm run import:bottobot
+
+      - name: Build
+        run: npm run build
+
+      - name: Test MCP Inspector contract
+        run: npm run test:mcp:inspector
+
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: ${{ always() }}
     needs:
+      - install-script-allowlist
       - unit-tests
       - build-package
       - bridge-tests
       - raw-exec-off-smoke
       - creative-rag-multilingual-smoke
       - coverage
+      - mcp-inspector-contract
     env:
+      INSTALL_SCRIPT_ALLOWLIST: ${{ needs.install-script-allowlist.result }}
       UNIT_TESTS: ${{ needs.unit-tests.result }}
       BUILD_PACKAGE: ${{ needs.build-package.result }}
       BRIDGE_TESTS: ${{ needs.bridge-tests.result }}
       RAW_EXEC_OFF_SMOKE: ${{ needs.raw-exec-off-smoke.result }}
       CREATIVE_RAG_SMOKE: ${{ needs.creative-rag-multilingual-smoke.result }}
       COVERAGE: ${{ needs.coverage.result }}
+      MCP_INSPECTOR_CONTRACT: ${{ needs.mcp-inspector-contract.result }}
     steps:
       - name: Check required CI jobs
         run: |
           set -euo pipefail
           failed=0
           for item in \
+            "install-script-allowlist=${INSTALL_SCRIPT_ALLOWLIST}" \
             "unit-tests=${UNIT_TESTS}" \
             "build-package=${BUILD_PACKAGE}" \
             "bridge-tests=${BRIDGE_TESTS}" \
             "raw-exec-off-smoke=${RAW_EXEC_OFF_SMOKE}" \
             "creative-rag-multilingual-smoke=${CREATIVE_RAG_SMOKE}" \
-            "coverage=${COVERAGE}"
+            "coverage=${COVERAGE}" \
+            "mcp-inspector-contract=${MCP_INSPECTOR_CONTRACT}"
           do
             name="${item%%=*}"
             result="${item#*=}"
