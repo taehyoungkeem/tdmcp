@@ -14,10 +14,10 @@
 - Keep package defaults exactly `TDMCP_TOOL_PROFILE=full` and `TDMCP_DYNAMIC_TOOLSETS=off`.
 - Static legacy `full`, `safe`, and `directory` must remain exactly 497, 458, and 15 tools.
 - Dynamic `full`, `safe`, and `directory` must be exactly 501, 462, and 22 tools; dynamic `core` must be exactly 17 tools. Dynamic `directory` is the exact union of the legacy 15 names and the protected core.
-- Dynamic `core` must serialize to at most 65,536 bytes. Every ordinary dynamic preset must remain at most 120 tools and 262,144 bytes.
+- Dynamic `core` must serialize to at most 65,536 bytes. Every selection made from a compact session must respect the configured 120-tool and 262,144-byte defaults.
 - The protected 17-tool core cannot be removed in dynamic mode.
 - Presets never activate destructive or raw-code tools. A risky tool requires its exact name in `tools`, `include_risky: true`, and all existing environment gates.
-- Dynamic `full` is startup/reset compatibility only. It is absent from the selectable preset schema and can never be selected from a compact session; only initialization/reset to a `full` startup state bypasses ordinary budgets.
+- Dynamic `full` is startup/reset compatibility only. It is absent from the selectable preset schema and can never be selected from a compact session. Initialization/reset to a legacy dynamic `full` or `safe` startup state bypasses ordinary budgets; selecting `safe` from a compact session does not.
 - `TDMCP_RAW_PYTHON=off` remains authoritative even when `include_risky` is true.
 - Macro nested dispatch is limited to same-session active safe targets. Raw-code and destructive targets are always forbidden, and target input validation must succeed before direct invocation.
 - Do not add a generic invocation proxy, change an existing tool name/schema/annotation/handler except for the bounded macro-dispatch safety fix, add embeddings, or add a runtime network dependency.
@@ -387,7 +387,7 @@ In `src/cli/configInit.ts`, render:
 ```ts
 '# Dynamic session-local discovery/activation tools. on|off.',
 'TDMCP_DYNAMIC_TOOLSETS="off"',
-'# Maximum active tools in dynamic mode; only startup/reset full compatibility bypasses this limit.',
+'# Maximum active tools in dynamic mode; only startup/reset full or safe compatibility bypasses this limit.',
 'TDMCP_TOOL_MAX_ACTIVE="120"',
 '# Serialized tools/list budget in KiB for dynamic selections.',
 'TDMCP_TOOL_METADATA_BUDGET_KB="256"',
@@ -751,10 +751,13 @@ Before the registration refactor, add macro regression tests that prove:
 Run:
 
 ```bash
-rtk test node scripts/run-vitest.mjs run tests/unit/toolRegistration.test.ts tests/integration/toolProfile.test.ts tests/smoke/execOff.test.ts
+rtk test node scripts/run-vitest.mjs run tests/unit/toolRegistration.test.ts tests/unit/runMacroScript.test.ts tests/integration/toolProfile.test.ts tests/smoke/execOff.test.ts
 ```
 
-Expected: the new test fails because grouped capture does not exist; existing profile tests remain green before the refactor.
+Expected: the registration test fails because grouped capture does not exist, and
+the new macro active-target, safe-only, and input-validation cases fail specifically
+because those guards are not yet implemented. Existing profile/smoke cases remain
+green; an unrelated parse, fixture, or setup failure does not satisfy the RED step.
 
 - [ ] **Step 3: Define grouped registrar and capture contracts**
 
@@ -1212,6 +1215,11 @@ Use fake handles whose `enable`, `disable`, and `update` mutate `enabled`, plus 
   dynamic/full session above ordinary budgets, select a compact preset, and assert
   reset returns to full; from a compact startup, an attempted `full` selection is
   invalid with zero handle changes and zero notifications.
+- `preserves a safe startup/reset compatibility state`: initialize a dynamic/safe
+  session with the default 120/262,144 budgets, assert exactly 462 active tools,
+  transition to a compact preset, then reset and assert the exact 462-tool startup
+  membership returns. From a compact startup, selecting `safe` remains subject to
+  both configured budgets and fails atomically under the defaults.
 - `applies replace and add modes`: replace optional membership, add another optional tool, assert the exact sorted active names, preset replacement state, and `custom` after explicit replacement and every add.
 - `rolls back every handle when one lifecycle update throws`: make the middle fake throw, assert all handles return to their snapshot and no notification is emitted.
 - `emits exactly one list-change notification`: transition across several enable/disable operations and assert the public notifier is called once after success.
@@ -1310,7 +1318,7 @@ reject every other unknown name and attach five suggestions
 require exact explicit risky names plus include_risky
 apply the raw-Python gate
 calculate count and exact serialized bytes
-reject ordinary count/byte overflow; only initialize/reset to a full startup bypasses
+reject ordinary count/byte overflow; only initialize/reset to a legacy full or safe startup bypasses
 compute complete before/after enabled-state maps
 ```
 
@@ -1331,14 +1339,12 @@ try {
     if (shouldEnable) handle.enable();
     else handle.disable();
   }
-} catch (cause) {
+} catch {
   for (const [name, wasEnabled] of before) {
     const handle = handles.get(name);
     if (handle && handle.enabled !== wasEnabled) handle.update({ enabled: wasEnabled });
   }
-  throw new ToolsetError("toolset_transition_failed", "Toolset transition rolled back.", {
-    cause: cause instanceof Error ? cause.name : "unknown",
-  });
+  throw new ToolsetError("toolset_transition_failed", "Toolset transition rolled back.");
 } finally {
   (server as { sendToolListChanged: () => void }).sendToolListChanged = previousNotify;
 }
@@ -1620,6 +1626,8 @@ const EXPECTED_COUNTS = [
 ```
 
 Assert the four management names are absent in every static mode and present in every dynamic mode.
+The dynamic `safe` row uses the unchanged default budgets and proves startup
+compatibility initialization reaches 462 rather than being rejected.
 For dynamic `directory`, independently assert the exact sorted union of the legacy
 directory fixture and `PROTECTED_CORE_TOOL_NAMES`, not only the count.
 
@@ -1731,9 +1739,14 @@ Attempt `{ preset: "full" }` from the compact session and assert input rejection
 zero handle changes, and zero list-change notifications. Open a separate dynamic
 session whose startup profile is `full`, assert the 497 baseline names plus four
 management names, select a compact preset, reset, and assert the exact 501-name
-startup state returns despite ordinary budgets. With `TDMCP_RAW_PYTHON=off`,
-explicitly select `execute_python_script` with `include_risky: true` and assert
-`raw_python_disabled` with no list change.
+startup state returns despite ordinary budgets. Open another dynamic session with
+startup profile `safe` and the default 120/262,144 budgets, assert its initial list
+is exactly the 458 legacy-safe names plus four management names (462), transition to
+`core`, reset, and assert the exact same 462-name list returns. From the original
+compact session, selecting `safe` must return the applicable budget error with zero
+state or notification changes. With `TDMCP_RAW_PYTHON=off`, explicitly select
+`execute_python_script` with `include_risky: true` and assert `raw_python_disabled`
+with no list change.
 
 - [ ] **Step 6: Run the protocol integration suite**
 
@@ -2380,7 +2393,7 @@ Dispatch `tdmcp-quality-qa` with all audit reports, implementation diffs, and co
 - PASS: configuration defaults and validation
 - PASS: static 497/458/15 compatibility
 - PASS: dynamic 501/462/22 and core 17 counts
-- PASS: core <=65,536 bytes and presets <=120/262,144
+- PASS: core <=65,536 bytes; compact-session selections enforce 120/262,144; legacy safe startup/reset is exactly 462
 - PASS: risky/raw gate composition, active-safe validated macro dispatch, and atomic rollback
 - PASS: stdio list-change and HTTP session isolation
 - PASS: bilingual top-five discovery evaluation
@@ -2507,7 +2520,8 @@ Expected: all planned repository files are committed, `pnpm-lock.yaml` is still 
 
 - [ ] Static `full`/`safe`/`directory` are 497/458/15.
 - [ ] Dynamic `full`/`safe`/`directory` are 501/462/22; dynamic `core` is 17; dynamic `directory` is the exact protected-core union.
-- [ ] Core is <=65,536 serialized bytes; ordinary presets are <=120 tools and <=262,144 bytes.
+- [ ] Core is <=65,536 serialized bytes; compact-session selections enforce the configured 120-tool/262,144-byte defaults; initialization/reset to a legacy dynamic `full` or `safe` startup is exempt.
+- [ ] Under default budgets, dynamic `safe` starts at exactly 462, can transition away, and resets to the exact 462-name startup state; selecting `safe` from compact remains budget-bound.
 - [ ] Original 497 names and fingerprints match `tests/fixtures/tool-contract-baseline.json`.
 - [ ] A failed transition changes zero handle states; a success emits one list-change notification.
 - [ ] `full` is startup/reset compatibility only and is absent from compact-session selection; ordinary presets contain no raw/destructive tools; explicit risky activation respects raw-Python and Codex approval gates.

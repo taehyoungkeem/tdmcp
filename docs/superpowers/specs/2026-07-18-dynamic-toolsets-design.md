@@ -122,7 +122,10 @@ expose 501 and 462 tools. Dynamic `directory` is the exact union of the legacy
 15-tool directory surface and the protected 17-tool core: 22 tools, because
 `get_preview`, `get_td_node_errors`, and `summarize_td_errors` are protected but are
 not in the legacy directory profile. Dynamic `full` is a startup/reset compatibility
-state only; it is never selectable from a compact session.
+state only; it is never selectable from a compact session. When a dynamic session
+starts in legacy `safe`, initialization and reset likewise preserve the exact
+462-tool compatibility surface despite ordinary count/byte budgets. Selecting
+`safe` from a compact session remains subject to the configured budgets.
 
 The owner's Codex configuration changes only after implementation and verification:
 
@@ -141,8 +144,8 @@ New configuration fields are:
 | Variable | Package default | Meaning |
 | --- | --- | --- |
 | `TDMCP_DYNAMIC_TOOLSETS` | `off` | Enables session-local management tools and runtime toolset changes |
-| `TDMCP_TOOL_MAX_ACTIVE` | `120` | Maximum active tools in dynamic mode; only initialization/reset to a `full` startup state bypasses it |
-| `TDMCP_TOOL_METADATA_BUDGET_KB` | `256` | Maximum serialized metadata for a dynamic selection; only initialization/reset to a `full` startup state bypasses it |
+| `TDMCP_TOOL_MAX_ACTIVE` | `120` | Maximum active tools in dynamic mode; only initialization/reset to a legacy `full` or `safe` startup state bypasses it |
+| `TDMCP_TOOL_METADATA_BUDGET_KB` | `256` | Maximum serialized metadata for a dynamic selection; only initialization/reset to a legacy `full` or `safe` startup state bypasses it |
 
 Invalid values fail through the existing configuration validation path. The core
 profile also has a non-configurable CI acceptance ceiling of 20 tools and 64 KiB.
@@ -243,7 +246,9 @@ are not silently shortened or weakened to satisfy the budget.
   recipe/vault/package tools. Import, export, installation, publication, and file
   overwrite tools require explicit selection.
 - `safe`: unchanged 458-tool legacy behavior in static mode; dynamic mode adds the
-  four protected management tools.
+  four protected management tools. A session started in dynamic `safe` initializes
+  and resets to exactly 462 as a legacy compatibility exemption from ordinary
+  budgets; selecting `safe` from a compact session still enforces those budgets.
 - `directory`: unchanged exact 15-tool registry-facing surface in static mode;
   dynamic mode exposes the exact 22-tool union of that legacy surface and the
   protected core so the session can leave the profile without a restart.
@@ -338,7 +343,8 @@ Every transition follows this order:
 6. Calculate the exact count and generated serialized-metadata budget.
 7. Reject an over-budget selection with the largest metadata contributors and
    smaller preset suggestions. Only initialization or reset to a session whose
-   startup profile is `full` bypasses the ordinary budgets.
+   startup profile is legacy `full` or `safe` bypasses the ordinary budgets;
+   selecting `safe` from a compact session does not bypass them.
 8. Compute the complete before/after enabled-state map.
 9. Apply enabled states as one in-process transaction and emit one
    `tools/list_changed` notification.
@@ -452,7 +458,8 @@ check is never promoted to `PASS` unless it actually ran.
 - explicit risky opt-in and raw-Python gate composition;
 - count and metadata budget rejection;
 - atomic failure with zero active-state changes;
-- reset behavior;
+- reset behavior, including a default-budget dynamic `safe` startup that transitions
+  away and resets to the exact 462-tool compatibility surface;
 - stable error codes, discriminated success/error parsing, `custom` profile-state
   semantics, and allowlisted redaction;
 - synchronous transition calls execute in call-arrival order without inventing
@@ -466,7 +473,8 @@ check is never promoted to `PASS` unless it actually ran.
 - dynamic `directory` is the exact 22-name union of legacy directory and protected
   core, while static `directory` remains exactly 15;
 - serialized core metadata is at most 65,536 bytes;
-- every preset is at most 120 tools and 262,144 bytes;
+- every preset selected from a compact session is subject to the configured
+  120-tool/262,144-byte defaults;
 - `build`, `show`, and `library` contain zero raw/destructive tools by default;
 - selecting a toolset emits a list-change notification and exposes the original
   tool schema and annotations;
@@ -475,6 +483,9 @@ check is never promoted to `PASS` unless it actually ran.
 - a compact session cannot select `full`; a dynamic session started in `full`
   retains all pre-change tool names and stable schema fingerprints and reset returns
   to that startup state;
+- a dynamic session started in `safe` under default budgets exposes exactly 462,
+  can transition away, and resets to the exact 462-tool startup state, while compact
+  selection of `safe` remains budget-checked;
 - two HTTP sessions can select different toolsets without cross-session leakage;
 - stdio retains one session-local active set.
 
@@ -539,14 +550,18 @@ The implementation is accepted only when all of the following are evidenced:
 
 1. The owner's configured startup surface contains at most 20 tools and 64 KiB of
    metadata.
-2. Each ordinary dynamic preset contains at most 120 tools and 256 KiB.
+2. Every selection made from a compact session respects the configured 120-tool and
+   256-KiB defaults. Only initialization/reset to a legacy `full` or `safe` startup
+   state is exempt.
 3. `build`, `show`, and `library` activate no raw-code or destructive tools.
 4. Static `full` remains exactly the existing 497 tools. Dynamic `full` contains
    those 497 unchanged tools plus the four management tools only as a startup/reset
-   compatibility state and is never selectable from a compact session. Static
-   `directory` remains 15 and dynamic `directory` is the exact protected-core union,
-   22. Existing schema fingerprints remain unchanged unless an independently
-   verified pre-existing defect requires a documented fix.
+   compatibility state and is never selectable from a compact session. Dynamic
+   `safe` is exactly 462 when initialized/reset as the startup compatibility state,
+   but compact selection of `safe` remains budget-bound. Static `directory` remains
+   15 and dynamic `directory` is the exact protected-core union, 22. Existing schema
+   fingerprints remain unchanged unless an independently verified pre-existing
+   defect requires a documented fix.
 5. A failed transition changes zero enabled states.
 6. HTTP session isolation and stdio behavior pass integration tests.
 7. Every golden request finds the expected tool within the top five.
