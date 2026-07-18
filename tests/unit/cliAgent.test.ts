@@ -600,15 +600,22 @@ describe("tdmcp-agent CLI", () => {
     }
   });
 
-  it("includes local copilot knobs and redacts Telegram identifiers in config --write-env", async () => {
+  it("exports dynamic-toolset defaults and keeps every configured secret redacted", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tdmcp-agent-cfg-"));
     try {
       const config = join(dir, "tdmcp.json");
       writeFileSync(
         config,
         JSON.stringify({
+          bridgeToken: "bridge-secret",
+          httpAuthToken: "http-secret",
+          llmApiKey: "llm-secret",
+          telegramBotToken: "telegram-secret",
           telegramAllowedChats: ["111", "222"],
           telegramAllowedUsers: ["5", "6"],
+          ragSmithsonianKey: "smithsonian-secret",
+          ragEuropeanaKey: "europeana-secret",
+          projectRagGhToken: "github-secret",
         }),
       );
       const r = await runCli(["config", "--write-env", "--config", config], {
@@ -621,12 +628,38 @@ describe("tdmcp-agent CLI", () => {
       expect(r.stdout).toContain("TDMCP_LLM_TIER");
       expect(r.stdout).toContain("TDMCP_LLM_MAX_STEPS");
       expect(r.stdout).toContain("TDMCP_LLM_TEMPERATURE");
+      expect(r.stdout).toContain('export TDMCP_DYNAMIC_TOOLSETS="off"');
+      expect(r.stdout).toContain('export TDMCP_TOOL_MAX_ACTIVE="120"');
+      expect(r.stdout).toContain('export TDMCP_TOOL_METADATA_BUDGET_KB="256"');
       expect(r.stdout).toContain('export TDMCP_PROJECT_RAG_SCORE_WEIGHTS="0.45:0.25:0.15:0.15"');
       expect(r.stdout).not.toContain("[object Object]");
-      expect(r.stdout).toContain("# export TDMCP_TELEGRAM_ALLOWED_CHATS=<set manually>");
-      expect(r.stdout).toContain("# export TDMCP_TELEGRAM_ALLOWED_USERS=<set manually>");
-      expect(r.stdout).not.toContain("111,222");
-      expect(r.stdout).not.toContain("5,6");
+      for (const name of [
+        "TDMCP_BRIDGE_TOKEN",
+        "TDMCP_HTTP_AUTH_TOKEN",
+        "TDMCP_LLM_API_KEY",
+        "TDMCP_TELEGRAM_BOT_TOKEN",
+        "TDMCP_TELEGRAM_ALLOWED_CHATS",
+        "TDMCP_TELEGRAM_ALLOWED_USERS",
+        "TDMCP_RAG_SMITHSONIAN_KEY",
+        "TDMCP_RAG_EUROPEANA_KEY",
+        "TDMCP_PROJECT_RAG_GH_TOKEN",
+      ]) {
+        expect(r.stdout).toContain(`# export ${name}=<set manually>`);
+      }
+      for (const secret of [
+        "bridge-secret",
+        "http-secret",
+        "llm-secret",
+        "telegram-secret",
+        "111",
+        "222",
+        "5,6",
+        "smithsonian-secret",
+        "europeana-secret",
+        "github-secret",
+      ]) {
+        expect(r.stdout).not.toContain(secret);
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

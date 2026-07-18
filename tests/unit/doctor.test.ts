@@ -19,6 +19,21 @@ afterAll(() => server.close());
 
 const LLM_BASE = "http://127.0.0.1:11434/v1";
 const noProjectRagIndex = { indexSize: () => null };
+const toolProfiles = [
+  "full",
+  "safe",
+  "directory",
+  "core",
+  "inspect",
+  "build",
+  "show",
+  "library",
+] as const;
+const dynamicModes = ["on", "off"] as const;
+const toolExposureCases = toolProfiles.flatMap((profile) =>
+  dynamicModes.map((dynamicToolsets) => ({ profile, dynamicToolsets })),
+);
+const compactProfiles = new Set(["core", "inspect", "build", "show", "library"]);
 
 /** Build a config from defaults, overriding only what a test cares about. */
 function makeConfig(overrides: Partial<TdmcpConfig> = {}): TdmcpConfig {
@@ -170,6 +185,60 @@ describe("tdmcp doctor", () => {
     const tools = r.report.checks.find((c) => c.id === "tools");
     expect(tools?.detail).toContain("restricted");
     expect(tools?.critical).toBe(false);
+  });
+
+  it.each(
+    toolExposureCases,
+  )("reports the $profile startup profile with dynamic toolsets $dynamicToolsets", async ({
+    profile,
+    dynamicToolsets,
+  }) => {
+    const r = await runDoctor({
+      config: makeConfig({
+        toolProfile: profile,
+        dynamicToolsets,
+        toolMaxActive: 80,
+        toolMetadataBudgetKb: 192,
+      }),
+      makeCtx,
+      makeLlmClient: () => ({
+        health: async () => ({ ok: true, modelReady: true, detail: "model is ready" }),
+      }),
+      projectRagProbes: noProjectRagIndex,
+    });
+    const tools = r.report.checks.find((check) => check.id === "tools");
+    if (!tools) throw new Error("doctor did not report the tools check");
+
+    expect(r.stdout).toContain(tools.detail);
+    expect(tools.detail).toContain(`startup profile ${profile}`);
+    expect(tools.detail).toContain(`dynamic toolsets ${dynamicToolsets}`);
+    expect(tools.detail).toContain("80 active");
+    expect(tools.detail).toContain("192 KiB");
+    expect(tools.detail).toContain(
+      dynamicToolsets === "on" ? "management tools expected" : "management tools not registered",
+    );
+    expect(tools.data).toMatchObject({
+      rawPython: "on",
+      toolProfile: profile,
+      startupProfile: profile,
+      dynamicToolsets,
+      toolMaxActive: 80,
+      toolMetadataBudgetKb: 192,
+      managementToolsExpected: dynamicToolsets === "on",
+    });
+    expect(r.report.checks.some((check) => check.id === "client_refresh")).toBe(false);
+
+    if (profile === "full") expect(tools.detail).toContain("full surface");
+    else expect(tools.detail).not.toContain("full surface");
+    if (compactProfiles.has(profile)) expect(tools.detail).toContain(`compact ${profile} surface`);
+    if (profile === "core" && dynamicToolsets === "on") {
+      expect(tools.detail).toContain("discover_tools");
+      expect(tools.detail).toContain("select_toolset");
+    }
+    if (profile === "build" && dynamicToolsets === "off") {
+      expect(tools.detail).toContain("TDMCP_TOOL_PROFILE");
+      expect(tools.detail).toContain("restart tdmcp");
+    }
   });
 
   it("--fix appends suggested remediation commands for non-passing checks", async () => {

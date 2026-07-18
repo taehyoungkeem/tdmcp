@@ -161,6 +161,18 @@ const TelegramTierSchema = z.preprocess(
   z.enum(LLM_TIER_VALUES).default(DEFAULT_TELEGRAM_LLM_TIER),
 );
 
+export const ToolProfileSchema = z.enum([
+  "full",
+  "safe",
+  "directory",
+  "core",
+  "inspect",
+  "build",
+  "show",
+  "library",
+]);
+export type ToolProfile = z.infer<typeof ToolProfileSchema>;
+
 export const ConfigSchema = z.object({
   /** TouchDesigner bridge host. */
   tdHost: z.string().min(1).default("127.0.0.1"),
@@ -195,10 +207,17 @@ export const ConfigSchema = z.object({
    * additionally hides the destructive/raw-code tools (a superset of
    * TDMCP_RAW_PYTHON=off) so an autonomous in-TD agent (e.g. via LOPs) gets a
    * curated, non-destructive surface; `directory` exposes only a compact
-   * registry-facing build/inspect set. Default `full` keeps existing clients
-   * unaffected.
+   * registry-facing build/inspect set. `core`, `inspect`, `build`, `show`, and
+   * `library` select compact task-oriented startup surfaces. Default `full`
+   * keeps existing clients unaffected.
    */
-  toolProfile: z.enum(["full", "safe", "directory"]).default("full"),
+  toolProfile: ToolProfileSchema.default("full"),
+  /** Enable session-local discovery and activation of tool subsets. */
+  dynamicToolsets: z.enum(["on", "off"]).default("off"),
+  /** Maximum active tools in an ordinary dynamic selection. */
+  toolMaxActive: z.coerce.number().int().positive().max(501).default(120),
+  /** Maximum serialized tool metadata for a dynamic selection, in KiB. */
+  toolMetadataBudgetKb: z.coerce.number().int().positive().max(4096).default(256),
   /**
    * Optional shared bearer token for the TD bridge. When set, the server sends it
    * as `Authorization: Bearer <token>` and the bridge requires a match. Leave unset
@@ -438,6 +457,9 @@ function envValues(env: NodeJS.ProcessEnv): Record<string, unknown> {
     rawPython: env.TDMCP_RAW_PYTHON,
     yolo: env.TDMCP_YOLO,
     toolProfile: env.TDMCP_TOOL_PROFILE,
+    dynamicToolsets: env.TDMCP_DYNAMIC_TOOLSETS,
+    toolMaxActive: env.TDMCP_TOOL_MAX_ACTIVE,
+    toolMetadataBudgetKb: env.TDMCP_TOOL_METADATA_BUDGET_KB,
     bridgeToken: env.TDMCP_BRIDGE_TOKEN || undefined,
     httpAuthToken: env.TDMCP_HTTP_AUTH_TOKEN || undefined,
     llmBaseUrl: env.TDMCP_LLM_BASE_URL,

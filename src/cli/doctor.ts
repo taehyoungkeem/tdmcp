@@ -399,7 +399,14 @@ function checkVault(
   return { ...base, status: "pass", detail: `folder found at ${absPath}.`, data };
 }
 
-/** Tool-exposure state: surfaces whether raw-Python / destructive tools are locked out. Never fatal. */
+function toolSurfaceLabel(profile: TdmcpConfig["toolProfile"]): string {
+  if (profile === "full") return "full surface";
+  if (profile === "safe") return "restricted safe surface";
+  if (profile === "directory") return "restricted directory surface";
+  return `compact ${profile} surface`;
+}
+
+/** Tool-exposure state: surfaces startup profile, dynamic mode, limits, and restrictions. */
 function checkTools(config: TdmcpConfig): DoctorCheck {
   const locked: string[] = [];
   if (config.rawPython === "off") locked.push("raw-Python escape hatches (TDMCP_RAW_PYTHON=off)");
@@ -407,15 +414,32 @@ function checkTools(config: TdmcpConfig): DoctorCheck {
     locked.push("destructive/raw-code tools (TDMCP_TOOL_PROFILE=safe)");
   if (config.toolProfile === "directory")
     locked.push("non-directory tools (TDMCP_TOOL_PROFILE=directory)");
+  const managementToolsExpected = config.dynamicToolsets === "on";
+  const managementDetail = managementToolsExpected
+    ? "management tools expected"
+    : "management tools not registered; set TDMCP_TOOL_PROFILE to another profile and restart tdmcp to change the static surface";
+  const compactAction =
+    managementToolsExpected && config.toolProfile === "core"
+      ? " Use discover_tools, then select_toolset to activate a focused surface."
+      : "";
+  const restrictionDetail = locked.length
+    ? ` Restricted: ${locked.join("; ")} are hidden. If a tool is unexpectedly missing, this is why.`
+    : "";
   return {
     id: "tools",
     title: "Tool exposure",
     status: "pass",
     critical: false,
-    detail: locked.length
-      ? `restricted: ${locked.join("; ")} are hidden. If a tool is unexpectedly missing, this is why.`
-      : `full surface (profile ${config.toolProfile}, raw-Python ${config.rawPython}).`,
-    data: { rawPython: config.rawPython, toolProfile: config.toolProfile },
+    detail: `${toolSurfaceLabel(config.toolProfile)} (startup profile ${config.toolProfile}; dynamic toolsets ${config.dynamicToolsets}; limits ${config.toolMaxActive} active / ${config.toolMetadataBudgetKb} KiB metadata; ${managementDetail}; raw-Python ${config.rawPython}).${compactAction}${restrictionDetail}`,
+    data: {
+      rawPython: config.rawPython,
+      toolProfile: config.toolProfile,
+      startupProfile: config.toolProfile,
+      dynamicToolsets: config.dynamicToolsets,
+      toolMaxActive: config.toolMaxActive,
+      toolMetadataBudgetKb: config.toolMetadataBudgetKb,
+      managementToolsExpected,
+    },
   };
 }
 

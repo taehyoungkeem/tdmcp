@@ -5,8 +5,10 @@ import type { LlmClientLike } from "../llm/client.js";
 import type { ProjectRagService } from "../projectRag/index.js";
 import type { RecipeLibrary } from "../recipes/loader.js";
 import type { TouchDesignerClient } from "../td-client/touchDesignerClient.js";
+import type { ToolProfile } from "../utils/config.js";
 import type { Logger } from "../utils/logger.js";
 import type { Vault } from "../vault/index.js";
+import type { ToolsetController } from "./toolsets/types.js";
 
 /** Shared dependencies injected into every tool handler (keeps handlers testable). */
 export interface ToolContext {
@@ -32,7 +34,15 @@ export interface ToolContext {
    * exposes a small registry-facing build/inspect surface.
    * Undefined means `"full"` (the default).
    */
-  toolProfile?: "full" | "safe" | "directory";
+  toolProfile?: ToolProfile;
+  /** Whether session-local tool discovery and activation are enabled. */
+  dynamicToolsets?: boolean;
+  /** Maximum number of tools in an ordinary dynamic selection. */
+  toolMaxActive?: number;
+  /** Maximum serialized metadata for an ordinary dynamic selection, in bytes. */
+  toolMetadataBudgetBytes?: number;
+  /** Session-local toolset lifecycle controller, present only in dynamic mode. */
+  toolsets?: ToolsetController;
   /**
    * Best-effort LLM backend for tools that need vision/captioning/text completion
    * (e.g. caption_top, auto_tag_library_asset). Routed via `resolveLlmClient`:

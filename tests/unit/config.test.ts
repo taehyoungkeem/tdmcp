@@ -23,6 +23,37 @@ describe("loadConfig", () => {
     expect(config.llmTemperature).toBe(0.4);
   });
 
+  it("keeps dynamic toolsets off and package limits stable by default", () => {
+    const cfg = loadConfig({});
+    expect(cfg.toolProfile).toBe("full");
+    expect(cfg.dynamicToolsets).toBe("off");
+    expect(cfg.toolMaxActive).toBe(120);
+    expect(cfg.toolMetadataBudgetKb).toBe(256);
+  });
+
+  it.each([
+    "core",
+    "inspect",
+    "build",
+    "show",
+    "library",
+  ] as const)("accepts the %s tool profile", (profile) => {
+    expect(loadConfig({ TDMCP_TOOL_PROFILE: profile }).toolProfile).toBe(profile);
+  });
+
+  it("loads dynamic limits from env and rejects invalid values", () => {
+    const cfg = loadConfig({
+      TDMCP_DYNAMIC_TOOLSETS: "on",
+      TDMCP_TOOL_MAX_ACTIVE: "80",
+      TDMCP_TOOL_METADATA_BUDGET_KB: "192",
+    });
+    expect(cfg.dynamicToolsets).toBe("on");
+    expect(cfg.toolMaxActive).toBe(80);
+    expect(cfg.toolMetadataBudgetKb).toBe(192);
+    expect(() => loadConfig({ TDMCP_TOOL_MAX_ACTIVE: "0" })).toThrow();
+    expect(() => loadConfig({ TDMCP_TOOL_METADATA_BUDGET_KB: "0" })).toThrow();
+  });
+
   it("reads overrides and coerces numeric ports", () => {
     const config = loadConfig({
       TDMCP_TD_HOST: "10.0.0.5",

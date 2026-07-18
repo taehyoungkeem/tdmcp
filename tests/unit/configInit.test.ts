@@ -31,6 +31,9 @@ describe("renderStarterConfig", () => {
       "TDMCP_EVENTS",
       "TDMCP_RAW_PYTHON",
       "TDMCP_TOOL_PROFILE",
+      "TDMCP_DYNAMIC_TOOLSETS",
+      "TDMCP_TOOL_MAX_ACTIVE",
+      "TDMCP_TOOL_METADATA_BUDGET_KB",
       "TDMCP_BRIDGE_TOKEN",
       "TDMCP_LLM_BASE_URL",
       "TDMCP_LLM_MODEL",
@@ -53,6 +56,9 @@ describe("renderStarterConfig", () => {
     for (const key of required) {
       expect(body).toContain(key);
     }
+    expect(body).toContain('TDMCP_DYNAMIC_TOOLSETS="off"');
+    expect(body).toContain('TDMCP_TOOL_MAX_ACTIVE="120"');
+    expect(body).toContain('TDMCP_TOOL_METADATA_BUDGET_KB="256"');
   });
 
   it("comments out secrets rather than seeding them with empty values", () => {

@@ -66,6 +66,9 @@ export function buildToolContext(
     allowRawPython: config.rawPython !== "off",
     yolo: config.yolo,
     toolProfile: config.toolProfile,
+    dynamicToolsets: config.dynamicToolsets === "on",
+    toolMaxActive: config.toolMaxActive,
+    toolMetadataBudgetBytes: config.toolMetadataBudgetKb * 1024,
     creativeRag,
     projectRag,
   };
