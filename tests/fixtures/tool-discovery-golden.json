@@ -1,0 +1,31 @@
+[
+  { "query": "TouchDesigner 연결 상태 확인", "expected": "get_td_info" },
+  { "query": "find every TOP under project1", "expected": "find_td_nodes" },
+  { "query": "이 노드 파라미터를 보고 싶어", "expected": "get_td_node_parameters" },
+  { "query": "렌더 결과 미리보기", "expected": "get_preview" },
+  { "query": "오디오 반응형 비주얼 만들기", "expected": "create_audio_reactive" },
+  { "query": "build a GLSL shader", "expected": "create_glsl_shader" },
+  { "query": "레시피 목록", "expected": "list_recipes" },
+  { "query": "apply a saved recipe", "expected": "apply_recipe" },
+  { "query": "노드 그래프 자동 정리", "expected": "arrange_network" },
+  { "query": "공연 전 리허설 점검", "expected": "show_preflight_report" },
+  { "query": "search component library", "expected": "browse_library" },
+  { "query": "라이브러리 자산 차이 비교", "expected": "diff_library_assets" },
+  { "query": "connect two nodes", "expected": "connect_nodes" },
+  { "query": "파라미터 값 수정", "expected": "update_td_node_parameters" },
+  { "query": "summarize all node errors", "expected": "summarize_td_errors" },
+  { "query": "create a particle system", "expected": "create_particle_system" },
+  { "query": "피드백 네트워크", "expected": "create_feedback_network" },
+  { "query": "projection mapping system", "expected": "create_projection_mapping" },
+  { "query": "컬러 그레이딩 적용", "expected": "create_color_grade" },
+  { "query": "셋리스트 실행", "expected": "create_setlist_runner" },
+  { "query": "import Shadertoy shader", "expected": "import_shadertoy" },
+  { "query": "포즈 트래킹", "expected": "create_pose_tracking" },
+  { "query": "output mapping", "expected": "setup_output" },
+  {
+    "query": "파이썬 API 도움",
+    "expected": "search_python_api",
+    "forbidden": ["execute_python_script"]
+  },
+  { "query": "execute_python_script", "risk": "any", "expected": "execute_python_script" }
+]
