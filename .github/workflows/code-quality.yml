@@ -19,10 +19,23 @@ env:
   NPM_CONFIG_FUND: "false"
 
 jobs:
+  install-script-allowlist:
+    name: Install Script Allowlist
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Check dependency install-script allowlist
+        run: node scripts/check-install-script-allowlist.mjs
+
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: install-script-allowlist
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -44,6 +57,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: install-script-allowlist
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -76,6 +90,7 @@ jobs:
     name: Recipe Validation
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: install-script-allowlist
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -97,6 +112,7 @@ jobs:
     name: Dependency Boundaries
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: install-script-allowlist
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -118,6 +134,7 @@ jobs:
     name: Complexity Gates
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: install-script-allowlist
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -144,6 +161,7 @@ jobs:
     name: Generated Artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: install-script-allowlist
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -201,6 +219,7 @@ jobs:
     timeout-minutes: 5
     if: ${{ always() }}
     needs:
+      - install-script-allowlist
       - typecheck
       - lint
       - recipes
@@ -209,6 +228,7 @@ jobs:
       - generated-artifacts
       - workflow-lint
     env:
+      INSTALL_SCRIPT_ALLOWLIST: ${{ needs.install-script-allowlist.result }}
       TYPECHECK: ${{ needs.typecheck.result }}
       LINT: ${{ needs.lint.result }}
       RECIPES: ${{ needs.recipes.result }}
@@ -222,6 +242,7 @@ jobs:
           set -euo pipefail
           failed=0
           for item in \
+            "install-script-allowlist=${INSTALL_SCRIPT_ALLOWLIST}" \
             "typecheck=${TYPECHECK}" \
             "lint=${LINT}" \
             "recipes=${RECIPES}" \

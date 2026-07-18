@@ -16,9 +16,24 @@ env:
   NPM_CONFIG_FUND: "false"
 
 jobs:
+  install-script-allowlist:
+    name: Install Script Allowlist
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Check dependency install-script allowlist
+        run: node scripts/check-install-script-allowlist.mjs
+
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: install-script-allowlist
     permissions:
       contents: read
       pull-requests: write
