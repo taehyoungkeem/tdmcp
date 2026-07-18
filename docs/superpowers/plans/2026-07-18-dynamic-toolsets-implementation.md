@@ -1411,12 +1411,15 @@ Expected: no MCP management tool is visible yet.
 - [ ] **Step 1: Write failing result-helper and management-tool tests**
 
 In `tests/unit/toolsetManagementTools.test.ts`, use a fake controller and capturing
-server. Assert all four names register with a discriminated success/error
+server. Assert all four names register with an MCP-compatible root-object
 `outputSchema`, all have `destructiveHint: false`, and read-only hints are true only
-for discovery/state inspection. Assert non-empty descriptions explain exactly-one
+for discovery/state inspection. MCP SDK 1.29.0 normalizes only root object schemas;
+passing a Zod discriminated union directly silently omits `outputSchema`. Keep a
+separate strict discriminated success/error schema for each tool and parse every
+success and stable error code against that schema, because the SDK skips output
+validation for `isError` results. Assert non-empty descriptions explain exactly-one
 selection, explicit risky opt-in, refresh uncertainty, and the static restart
-fallback. Parse every success and stable error code against the advertised result
-schema, because the SDK skips output validation for `isError` results.
+fallback.
 
 Add an error assertion:
 
@@ -1458,7 +1461,7 @@ export function structuredErrorResult(summary: string, data: SafeStructuredError
   return {
     isError: true,
     content: [{ type: "text", text: summary }],
-    structuredContent: { ok: false, ...data },
+    structuredContent: { ...data, ok: false },
   };
 }
 ```
@@ -1502,9 +1505,11 @@ export const discoverToolsOutputSchema = z.object({
 });
 ```
 
-Advertise a discriminated union of this success shape and the code-specific
-`toolsetErrorOutputSchema`. The registrar uses the union as `outputSchema`,
-`readOnlyHint: true`, `destructiveHint: false`, and `openWorldHint: false`. The
+Export a strict discriminated union of this success shape and the code-specific
+`toolsetErrorOutputSchema` for direct result validation. The registrar uses a
+root-object MCP envelope as `outputSchema` (at minimum `ok`, plus the public
+success/error fields as optional where necessary), never the union itself. Register
+with `readOnlyHint: true`, `destructiveHint: false`, and `openWorldHint: false`. The
 implementation returns `structuredResult` with no full schemas.
 
 - [ ] **Step 5: Implement `select_toolset`**
@@ -1529,9 +1534,10 @@ export const toolsetTransitionOutputSchema = z.object({
 
 The manager enforces the cross-field selection rules. `toolProfileStateSchema` is
 the eight configured profiles plus `custom`. Register with `readOnlyHint: false`,
-`destructiveHint: false`, `openWorldHint: false`, advertise the discriminated
-success/error union, and return a concise summary plus the exact structured
-transition. Assert through `tools/list` that the preset enum omits `full`.
+`destructiveHint: false`, `openWorldHint: false`, advertise a root-object MCP
+envelope, and export the strict discriminated success/error union for direct tests.
+Return a concise summary plus the exact structured transition. Assert through
+`tools/list` that the preset enum omits `full`.
 
 - [ ] **Step 6: Implement state inspection and reset**
 
@@ -1539,10 +1545,10 @@ transition. Assert through `tools/list` that the preset enum omits `full`.
 
 `resetToolset.ts` uses an empty Zod object input and reuses `toolsetTransitionOutputSchema`. It is a non-destructive mutation. Both call `ctx.toolsets`; if absent, return `dynamic_toolsets_disabled` through `structuredErrorResult`.
 
-Both registrars advertise the same discriminated success/code-specific-error union
-used by discovery and selection. In-memory MCP tests explicitly parse success and
-every stable error for all four tools, including `custom` after explicit/add and the
-startup profile after reset.
+Both registrars advertise root-object MCP envelopes and export strict
+success/code-specific-error unions used by discovery and selection tests. In-memory
+MCP tests explicitly parse success and every stable error for all four tools,
+including `custom` after explicit/add and the startup profile after reset.
 
 Update `src/tools/util/index.ts`:
 
@@ -1600,6 +1606,11 @@ const dynamic = await collectFullTools({
   TDMCP_DYNAMIC_TOOLSETS: "on",
 });
 ```
+
+`explicitGeneratorEnv` must honor only the explicit profile/dynamic overrides above;
+its current hard-coded `TDMCP_DYNAMIC_TOOLSETS: "off"` would otherwise make both
+collections static. Do not spread the ambient `process.env` into the deterministic
+generator environment.
 
 Assert legacy count is 497, dynamic count is 501, every legacy name/fingerprint matches the immutable baseline, and the dynamic-only names equal the four management names. Render the 501-entry dynamic manifest. The manager's temporary zero-byte management fallback now disappears under normal operation.
 
