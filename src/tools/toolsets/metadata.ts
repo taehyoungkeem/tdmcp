@@ -1,6 +1,16 @@
 import { createHash } from "node:crypto";
-import { TOOL_METADATA } from "./toolMetadata.generated.js";
+import { OPTIONAL_TOOL_METADATA, TOOL_METADATA } from "./toolMetadata.generated.js";
 import type { GeneratedToolMetadataEntry } from "./types.js";
+
+export function generatedToolMetadata(name: string): GeneratedToolMetadataEntry | undefined {
+  if (Object.hasOwn(TOOL_METADATA, name)) return TOOL_METADATA[name];
+  if (Object.hasOwn(OPTIONAL_TOOL_METADATA, name)) return OPTIONAL_TOOL_METADATA[name];
+  return undefined;
+}
+
+export function hasGeneratedToolMetadata(name: string): boolean {
+  return generatedToolMetadata(name) !== undefined;
+}
 
 function sortValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortValue);
@@ -34,7 +44,7 @@ export function serializedToolListBytesFromEntries(entryBytes: readonly number[]
 
 export function serializedToolListBytes(names: Iterable<string>): number {
   const bytes = [...names].sort().map((name) => {
-    const entry: GeneratedToolMetadataEntry | undefined = TOOL_METADATA[name];
+    const entry = generatedToolMetadata(name);
     if (!entry) throw new Error(`Missing generated metadata for ${name}`);
     return entry.bytes;
   });

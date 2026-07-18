@@ -463,7 +463,7 @@ describe("ToolsetManager legacy startup compatibility", () => {
     expect(full.manager.getActive()).toMatchObject({
       startup_profile: "full",
       current_profile: "full",
-      active_count: 501,
+      active_count: 511,
     });
     expect(full.manager.getActive().active_tools).toEqual(ALL_DYNAMIC_NAMES);
     expect(full.notifier).not.toHaveBeenCalled();
@@ -471,7 +471,7 @@ describe("ToolsetManager legacy startup compatibility", () => {
     await full.manager.select({ preset: "core" });
     expect(full.manager.getActive()).toMatchObject({ current_profile: "core", active_count: 17 });
     const reset = await full.manager.reset();
-    expect(reset).toMatchObject({ current_profile: "full", active_count: 501 });
+    expect(reset).toMatchObject({ current_profile: "full", active_count: 511 });
     expect(full.manager.getActive().active_tools).toEqual(ALL_DYNAMIC_NAMES);
     expect(full.notifier).toHaveBeenCalledTimes(2);
 
@@ -497,7 +497,7 @@ describe("ToolsetManager legacy startup compatibility", () => {
 
   it("preserves a safe startup/reset compatibility state", async () => {
     const expectedSafe = expectedSafeStartupNames();
-    expect(expectedSafe).toHaveLength(462);
+    expect(expectedSafe).toHaveLength(468);
     const safe = makeSession({
       names: ALL_DYNAMIC_NAMES,
       startupProfile: "safe",
@@ -511,14 +511,14 @@ describe("ToolsetManager legacy startup compatibility", () => {
     expect(safe.manager.getActive()).toMatchObject({
       startup_profile: "safe",
       current_profile: "safe",
-      active_count: 462,
+      active_count: 468,
     });
     expect(safe.manager.getActive().active_tools).toEqual(expectedSafe);
     expect(safe.notifier).not.toHaveBeenCalled();
 
     await safe.manager.select({ preset: "core" });
     await safe.manager.reset();
-    expect(safe.manager.getActive()).toMatchObject({ current_profile: "safe", active_count: 462 });
+    expect(safe.manager.getActive()).toMatchObject({ current_profile: "safe", active_count: 468 });
     expect(safe.manager.getActive().active_tools).toEqual(expectedSafe);
     expect(safe.notifier).toHaveBeenCalledTimes(2);
 
@@ -540,7 +540,7 @@ describe("ToolsetManager legacy startup compatibility", () => {
     const byteBound = makeSession({
       names: ALL_DYNAMIC_NAMES,
       startupProfile: "core",
-      maxActive: 501,
+      maxActive: 511,
       metadataBudgetBytes: 262_144,
     });
     byteBound.manager.initialize();

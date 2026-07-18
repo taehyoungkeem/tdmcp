@@ -168,8 +168,8 @@ async function withRegisteredTools<T>(
 }
 
 describe("dynamic toolset management MCP tools", () => {
-  it("ships metadata for the 497 legacy tools plus four management tools", () => {
-    expect(Object.keys(TOOL_METADATA)).toHaveLength(501);
+  it("ships metadata for the 507 static tools plus four management tools", () => {
+    expect(Object.keys(TOOL_METADATA)).toHaveLength(511);
     for (const name of MANAGEMENT_NAMES) expect(TOOL_METADATA).toHaveProperty(name);
   });
 

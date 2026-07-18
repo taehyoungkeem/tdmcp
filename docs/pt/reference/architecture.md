@@ -60,9 +60,12 @@ Os padrões compatíveis do pacote continuam `TDMCP_TOOL_PROFILE=full`,
 `TDMCP_DYNAMIC_TOOLSETS=off`, `TDMCP_TOOL_MAX_ACTIVE=120` e
 `TDMCP_TOOL_METADATA_BUDGET_KB=256`. Existem oito perfis de inicialização:
 `full`, `safe`, `directory`, `core`, `inspect`, `build`, `show` e `library`.
-O `full` estático preserva as 497 tools legadas. O `full` dinâmico adiciona quatro
-tools de gestão, totalizando 501, mas é apenas um estado de compatibilidade de
-inicialização/reset e não pode ser selecionado a partir de uma sessão compacta. O perfil `directory` tem 15 tools estáticas / 22 dinâmicas.
+O `full` estático expõe a superfície completa de 507 tools. O `full` dinâmico adiciona quatro
+tools de gestão, totalizando 511, mas é apenas um estado de compatibilidade de
+inicialização/reset e não pode ser selecionado a partir de uma sessão compacta. O perfil `directory` tem 16 tools estáticas / 23 dinâmicas.
+Com `TDMCP_RAG_APPLY_CARD=1`, o registro opcional `apply_creative_card` eleva
+`full` para 508 tools estáticas / 512 dinâmicas e `safe` para 465 / 469; `core`
+e `directory` permanecem inalterados.
 
 Cada chamada de `createTdmcpServer` possui um `ToolCatalog` e um
 `ToolsetManager`. A factory HTTP existente cria um novo servidor e manager para
@@ -83,8 +86,8 @@ ambiente. `TDMCP_RAW_PYTHON=off` é autoritativo. A seleção não chama a tool 
 cria um proxy genérico.
 
 Nota de compatibilidade: `run_macro_script` mantém o campo legado
-`allowRawPython` e a descrição MCP inalterada para preservar o contrato imutável
-das 497 tools. Em runtime, o texto legado não concede autorização: alvos de código
+`allowRawPython` e a descrição MCP inalterada para preservar o contrato de
+compatibilidade dessa tool. Em runtime, o texto legado não concede autorização: alvos de código
 cru e destrutivos ficam sempre bloqueados, independentemente desse campo ou do
 contexto do servidor; só handlers ativos na mesma sessão, com entrada válida, não
 crus e não destrutivos podem rodar.

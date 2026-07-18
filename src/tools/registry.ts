@@ -27,6 +27,38 @@ export const runtimeToolRegistrars: ToolRegistrar[] = runtimeToolRegistrarGroups
   (entry) => entry.registrars,
 );
 
+export interface RuntimeToolMetadata {
+  title?: string;
+  description?: string;
+  enabled: true;
+}
+
+/**
+ * Build a registration-derived, read-only tool catalog without starting an MCP
+ * transport. The agent CLI uses this only to ground the opt-in visual planner;
+ * callbacks are deliberately discarded and can never be executed through the
+ * catalog.
+ */
+export function collectRuntimeToolMetadata(ctx: ToolContext): Record<string, RuntimeToolMetadata> {
+  const catalog: Record<string, RuntimeToolMetadata> = {};
+  const recorder = {
+    registerTool(name: string, config: unknown): undefined {
+      const metadata =
+        config !== null && typeof config === "object"
+          ? (config as { title?: unknown; description?: unknown })
+          : {};
+      catalog[name] = {
+        ...(typeof metadata.title === "string" ? { title: metadata.title } : {}),
+        ...(typeof metadata.description === "string" ? { description: metadata.description } : {}),
+        enabled: true,
+      };
+      return undefined;
+    },
+  };
+  registerToolRegistrars(recorder as unknown as McpServer, ctx, runtimeToolRegistrars);
+  return catalog;
+}
+
 export function registerToolRegistrars(
   server: McpServer,
   ctx: ToolContext,

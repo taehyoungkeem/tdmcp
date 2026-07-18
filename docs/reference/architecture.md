@@ -56,9 +56,12 @@ The package-compatible defaults remain `TDMCP_TOOL_PROFILE=full`,
 `TDMCP_DYNAMIC_TOOLSETS=off`, `TDMCP_TOOL_MAX_ACTIVE=120`, and
 `TDMCP_TOOL_METADATA_BUDGET_KB=256`. All eight startup profiles are supported:
 `full`, `safe`, `directory`, `core`, `inspect`, `build`, `show`, and `library`.
-Static `full` preserves the 497 legacy tools. Dynamic `full` adds the four
-management tools for 501 total, but it is a startup/reset compatibility state and
-is not selectable from a compact session. The `directory` profile is static 15 / dynamic 22.
+Static `full` exposes the complete 507-tool surface. Dynamic `full` adds the four
+management tools for 511 total, but it is a startup/reset compatibility state and
+is not selectable from a compact session. The `directory` profile is static 16 / dynamic 23.
+The opt-in `TDMCP_RAG_APPLY_CARD=1` registration adds `apply_creative_card`, so
+`full` becomes static 508 / dynamic 512 and `safe` becomes 465 / 469; compact
+`core` and `directory` remain unchanged.
 
 Each `createTdmcpServer` call owns one `ToolCatalog` and one `ToolsetManager`.
 The existing HTTP server factory creates a new server and manager for each HTTP
@@ -79,7 +82,7 @@ gates. `TDMCP_RAW_PYTHON=off` is authoritative. Dynamic selection does not invok
 a tool and does not introduce a generic proxy.
 
 Compatibility note: `run_macro_script` keeps its legacy `allowRawPython` input
-field and MCP description unchanged to preserve the immutable 497-tool contract.
+field and MCP description unchanged to preserve that tool's compatibility contract.
 At runtime, the legacy wording is not an authorization opt-in: nested raw-code and
 destructive targets are always blocked regardless of that field or server context;
 only same-session active, input-valid, non-raw, non-destructive handlers can run.

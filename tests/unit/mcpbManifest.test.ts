@@ -2,13 +2,17 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { TOOL_METADATA } from "../../src/tools/toolsets/toolMetadata.generated.js";
+import {
+  OPTIONAL_TOOL_METADATA,
+  TOOL_METADATA,
+} from "../../src/tools/toolsets/toolMetadata.generated.js";
 import { ConfigSchema, ToolProfileSchema } from "../../src/utils/config.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const profileChoices = [...ToolProfileSchema.options];
 const packageDefaults = ConfigSchema.parse({});
-const generatedToolCount = Object.keys(TOOL_METADATA).length;
+const generatedToolCount =
+  Object.keys(TOOL_METADATA).length + Object.keys(OPTIONAL_TOOL_METADATA).length;
 
 function userConfigEnv(name: string): string {
   return `\${user_config.${name}}`;

@@ -78,7 +78,7 @@ describe("curated tool profiles", () => {
   it("locks the 13 existing core names and exact protected 17-name order", () => {
     expect(CORE_EXISTING_TOOL_NAMES).toHaveLength(13);
     expect(PROTECTED_CORE_TOOL_NAMES).toHaveLength(17);
-    expect(DIRECTORY_PROFILE_TOOL_NAMES).toHaveLength(15);
+    expect(DIRECTORY_PROFILE_TOOL_NAMES).toHaveLength(16);
     expect(new Set(PROTECTED_CORE_TOOL_NAMES).size).toBe(17);
     expect(PROTECTED_CORE_TOOL_NAMES).toEqual([
       "get_td_info",

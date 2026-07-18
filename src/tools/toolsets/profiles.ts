@@ -40,6 +40,9 @@ export const SAFE_PROFILE_EXCLUDE: ReadonlySet<string> = new Set([
   "create_python_script",
   "author_script_operator",
   "delete_td_node",
+  "edit_td_node_metadata",
+  "add_custom_parameters",
+  "save_td_project",
   "rebuild_network",
   "edit_dat_content",
   "set_dat_content",
@@ -74,6 +77,7 @@ export const SAFE_PROFILE_EXCLUDE: ReadonlySet<string> = new Set([
   "merge_vaults",
   "manage_component_storage",
   "macro_recorder",
+  "manage_agent_skills",
 ]);
 
 export const DIRECTORY_PROFILE_TOOL_NAMES = [
@@ -92,6 +96,7 @@ export const DIRECTORY_PROFILE_TOOL_NAMES = [
   "list_recipes",
   "apply_recipe",
   "browse_library",
+  "get_td_docs",
 ] as const;
 
 export const RAW_CODE_TOOL_NAMES = [
@@ -132,7 +137,6 @@ export const INSPECT_EXTRA_TOOL_NAMES = [
 ] as const;
 
 export const BUILD_EXTRA_TOOL_NAMES = [
-  "add_custom_parameters",
   "animate_parameter",
   "apply_glsl_top_mapping",
   "apply_lut",

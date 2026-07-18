@@ -37,7 +37,7 @@
           "name": "TDMCP_TOOL_MAX_ACTIVE",
           "default": "120",
           "format": "number",
-          "description": "Maximum active tools in an ordinary dynamic selection (1..501)."
+          "description": "Maximum active tools in an ordinary dynamic selection (1..512)."
         },
         {
           "name": "TDMCP_TOOL_METADATA_BUDGET_KB",

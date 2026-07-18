@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { hasGeneratedToolMetadata } from "./metadata.js";
 import { DYNAMIC_MANAGEMENT_TOOL_NAME_SET } from "./profiles.js";
-import { TOOL_METADATA } from "./toolMetadata.generated.js";
 import type { SelectableToolsetPreset } from "./types.js";
 
 export const TOOLSET_ERROR_CODES = [
@@ -87,7 +87,7 @@ const SELECTABLE_PRESET_SET: ReadonlySet<string> = new Set([
 function isPublicToolName(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    (Object.hasOwn(TOOL_METADATA, value) || DYNAMIC_MANAGEMENT_TOOL_NAME_SET.has(value))
+    (hasGeneratedToolMetadata(value) || DYNAMIC_MANAGEMENT_TOOL_NAME_SET.has(value))
   );
 }
 

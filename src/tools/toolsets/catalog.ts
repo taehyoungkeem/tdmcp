@@ -1,3 +1,4 @@
+import { generatedToolMetadata } from "./metadata.js";
 import { effectiveToolDescription, TOOL_DISCOVERY_OVERRIDES } from "./overrides.js";
 import {
   BUILD_PROFILE_TOOL_NAMES,
@@ -9,7 +10,6 @@ import {
   SAFE_PROFILE_EXCLUDE,
   SHOW_PROFILE_TOOL_NAMES,
 } from "./profiles.js";
-import { TOOL_METADATA } from "./toolMetadata.generated.js";
 import type {
   CapturedToolRegistration,
   DiscoverToolCandidate,
@@ -231,9 +231,7 @@ function indexRegistration(registration: CapturedToolRegistration): IndexedCatal
   const override = Object.hasOwn(TOOL_DISCOVERY_OVERRIDES, registration.name)
     ? TOOL_DISCOVERY_OVERRIDES[registration.name]
     : undefined;
-  const metadata = Object.hasOwn(TOOL_METADATA, registration.name)
-    ? TOOL_METADATA[registration.name]
-    : undefined;
+  const metadata = generatedToolMetadata(registration.name);
   if (!metadata && !DYNAMIC_MANAGEMENT_TOOL_NAME_SET.has(registration.name)) {
     throw new Error(`Missing generated metadata for ${registration.name}`);
   }

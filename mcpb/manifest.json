@@ -101,7 +101,7 @@
       "required": false,
       "default": 120,
       "min": 1,
-      "max": 501
+      "max": 512
     },
     "TDMCP_TOOL_METADATA_BUDGET_KB": {
       "type": "number",

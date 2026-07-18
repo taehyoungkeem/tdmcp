@@ -45,6 +45,9 @@ const SAFE_PROFILE_EXCLUDE = [
   "create_python_script",
   "author_script_operator",
   "delete_td_node",
+  "edit_td_node_metadata",
+  "add_custom_parameters",
+  "save_td_project",
   "rebuild_network",
   "edit_dat_content",
   "set_dat_content",
@@ -79,6 +82,7 @@ const SAFE_PROFILE_EXCLUDE = [
   "merge_vaults",
   "manage_component_storage",
   "macro_recorder",
+  "manage_agent_skills",
 ];
 
 // Build/inspect surface that the safe profile must keep available.
@@ -91,6 +95,7 @@ const SAFE_PROFILE_KEEP = [
   "get_td_classes",
   "load_session_profile",
   "search_operators",
+  "get_td_docs",
 ];
 
 const DIRECTORY_PROFILE_TOOLS = [
@@ -109,6 +114,7 @@ const DIRECTORY_PROFILE_TOOLS = [
   "list_recipes",
   "apply_recipe",
   "browse_library",
+  "get_td_docs",
 ];
 
 async function toolList(env: NodeJS.ProcessEnv = {}) {
@@ -122,13 +128,13 @@ async function toolNames(env: NodeJS.ProcessEnv = {}): Promise<string[]> {
 
 describe("integration: TDMCP_TOOL_PROFILE", () => {
   const expectedCounts = [
-    [{ TDMCP_TOOL_PROFILE: "full" }, 497],
-    [{ TDMCP_TOOL_PROFILE: "safe" }, 458],
-    [{ TDMCP_TOOL_PROFILE: "directory" }, 15],
+    [{ TDMCP_TOOL_PROFILE: "full" }, 507],
+    [{ TDMCP_TOOL_PROFILE: "safe" }, 464],
+    [{ TDMCP_TOOL_PROFILE: "directory" }, 16],
     [{ TDMCP_TOOL_PROFILE: "core" }, 13],
-    [{ TDMCP_TOOL_PROFILE: "full", TDMCP_DYNAMIC_TOOLSETS: "on" }, 501],
-    [{ TDMCP_TOOL_PROFILE: "safe", TDMCP_DYNAMIC_TOOLSETS: "on" }, 462],
-    [{ TDMCP_TOOL_PROFILE: "directory", TDMCP_DYNAMIC_TOOLSETS: "on" }, 22],
+    [{ TDMCP_TOOL_PROFILE: "full", TDMCP_DYNAMIC_TOOLSETS: "on" }, 511],
+    [{ TDMCP_TOOL_PROFILE: "safe", TDMCP_DYNAMIC_TOOLSETS: "on" }, 468],
+    [{ TDMCP_TOOL_PROFILE: "directory", TDMCP_DYNAMIC_TOOLSETS: "on" }, 23],
     [{ TDMCP_TOOL_PROFILE: "core", TDMCP_DYNAMIC_TOOLSETS: "on" }, 17],
   ] as const;
 
@@ -142,6 +148,47 @@ describe("integration: TDMCP_TOOL_PROFILE", () => {
     }
   });
 
+  it.each([
+    [{ TDMCP_TOOL_PROFILE: "full", TDMCP_RAG_APPLY_CARD: "1" }, 508],
+    [{ TDMCP_TOOL_PROFILE: "safe", TDMCP_RAG_APPLY_CARD: "1" }, 465],
+    [{ TDMCP_TOOL_PROFILE: "directory", TDMCP_RAG_APPLY_CARD: "1" }, 16],
+    [{ TDMCP_TOOL_PROFILE: "core", TDMCP_RAG_APPLY_CARD: "1" }, 13],
+    [
+      {
+        TDMCP_TOOL_PROFILE: "full",
+        TDMCP_DYNAMIC_TOOLSETS: "on",
+        TDMCP_RAG_APPLY_CARD: "1",
+      },
+      512,
+    ],
+    [
+      {
+        TDMCP_TOOL_PROFILE: "safe",
+        TDMCP_DYNAMIC_TOOLSETS: "on",
+        TDMCP_RAG_APPLY_CARD: "1",
+      },
+      469,
+    ],
+    [
+      {
+        TDMCP_TOOL_PROFILE: "directory",
+        TDMCP_DYNAMIC_TOOLSETS: "on",
+        TDMCP_RAG_APPLY_CARD: "1",
+      },
+      23,
+    ],
+    [
+      {
+        TDMCP_TOOL_PROFILE: "core",
+        TDMCP_DYNAMIC_TOOLSETS: "on",
+        TDMCP_RAG_APPLY_CARD: "1",
+      },
+      17,
+    ],
+  ] as const)("locks opt-in RAG apply-card %o to %i tools", async (env, expectedCount) => {
+    expect(await toolNames(env)).toHaveLength(expectedCount);
+  });
+
   it("dynamic directory is the exact legacy directory and protected-core union", async () => {
     const names = await toolNames({
       TDMCP_TOOL_PROFILE: "directory",
@@ -151,7 +198,7 @@ describe("integration: TDMCP_TOOL_PROFILE", () => {
       ...new Set([...DIRECTORY_PROFILE_TOOLS, ...PROTECTED_CORE_TOOL_NAMES]),
     ].sort();
     expect(names.sort()).toEqual(expected);
-    expect(names).toHaveLength(22);
+    expect(names).toHaveLength(23);
   });
 
   it("keeps the centralized profile policy equal to the locked legacy names", () => {
@@ -185,6 +232,7 @@ describe("integration: TDMCP_TOOL_PROFILE", () => {
     expect(names).not.toContain("create_panic");
     expect(names).not.toContain("manage_checkpoint");
     expect(names).not.toContain("manage_component");
+    expect(names).not.toContain("add_custom_parameters");
     expect(names).not.toContain("manage_packages");
     expect(names).not.toContain("make_portable_tox");
     expect(names).not.toContain("export_recipe_bundle");
@@ -214,7 +262,7 @@ describe("integration: TDMCP_TOOL_PROFILE", () => {
   it("directory exposes exactly the compact registry-facing surface", async () => {
     const names = await toolNames({ TDMCP_TOOL_PROFILE: "directory" });
     expect(names.sort()).toEqual([...DIRECTORY_PROFILE_TOOLS].sort());
-    expect(names).toHaveLength(15);
+    expect(names).toHaveLength(16);
   });
 
   it.each([
@@ -243,11 +291,11 @@ describe("integration: TDMCP_TOOL_PROFILE", () => {
   it("safe hides exactly SAFE_PROFILE_EXCLUDE.size fewer tools than full", async () => {
     const full = await toolNames({ TDMCP_TOOL_PROFILE: "full" });
     const safe = await toolNames({ TDMCP_TOOL_PROFILE: "safe" });
-    expect(full).toHaveLength(497);
-    expect(safe).toHaveLength(458);
+    expect(full).toHaveLength(507);
+    expect(safe).toHaveLength(464);
     expect(safe.length).toBeLessThan(full.length);
     expect(full.length - safe.length).toBe(SAFE_PROFILE_EXCLUDE.length);
-    expect(SAFE_PROFILE_EXCLUDE.length).toBe(39);
+    expect(SAFE_PROFILE_EXCLUDE.length).toBe(43);
   });
 
   it("safe exclusion list matches destructive tool annotations", async () => {
@@ -257,6 +305,29 @@ describe("integration: TDMCP_TOOL_PROFILE", () => {
       .map((tool) => tool.name)
       .sort();
     expect(destructiveNames).toEqual([...SAFE_PROFILE_EXCLUDE].sort());
+  });
+
+  it("advertises field-level schemas for refined and discriminated tools", async () => {
+    const tools = await toolList({ TDMCP_TOOL_PROFILE: "full" });
+    const byName = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
+
+    expect(byName.arrange_network?.inputSchema.properties).toMatchObject({
+      path: expect.anything(),
+      layout_mode: expect.anything(),
+      positions: expect.anything(),
+    });
+    expect(byName.manage_artist_workspace?.inputSchema.properties).toMatchObject({
+      action: expect.anything(),
+      network_path: expect.anything(),
+      workspace_id: expect.anything(),
+    });
+    expect(byName.manage_artist_workspace?.outputSchema?.properties).toHaveProperty("status");
+    expect(byName.manage_project_brief?.inputSchema.properties).toMatchObject({
+      action: expect.anything(),
+      project_root: expect.anything(),
+      brief: expect.anything(),
+    });
+    expect(byName.manage_project_brief?.outputSchema?.properties).toHaveProperty("revision");
   });
 
   it("safe ⊇ rawPython=off (composition): safe hides everything rawPython=off hides", async () => {

@@ -9,7 +9,10 @@ import {
   DYNAMIC_MANAGEMENT_TOOL_NAMES,
   PROTECTED_CORE_TOOL_NAMES,
 } from "../../src/tools/toolsets/profiles.js";
-import { TOOL_METADATA } from "../../src/tools/toolsets/toolMetadata.generated.js";
+import {
+  OPTIONAL_TOOL_METADATA,
+  TOOL_METADATA,
+} from "../../src/tools/toolsets/toolMetadata.generated.js";
 import { ConfigSchema, ToolProfileSchema } from "../../src/utils/config.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -18,6 +21,7 @@ const read = (path: string): string => readFileSync(join(root, path), "utf8");
 const profileChoices = [...ToolProfileSchema.options];
 const defaults = ConfigSchema.parse({});
 const dynamicCount = Object.keys(TOOL_METADATA).length;
+const maximumToolCount = dynamicCount + Object.keys(OPTIONAL_TOOL_METADATA).length;
 const legacyCount = dynamicCount - DYNAMIC_MANAGEMENT_TOOL_NAMES.length;
 const staticDirectoryCount = DIRECTORY_PROFILE_TOOL_NAMES.length;
 const dynamicDirectoryCount = new Set([
@@ -78,10 +82,10 @@ function expectBothRecoveryRecipes(text: string): void {
 describe("dynamic toolset documentation parity", () => {
   it("derives the documented inventory from the generated runtime contracts", () => {
     expect({ legacyCount, dynamicCount, staticDirectoryCount, dynamicDirectoryCount }).toEqual({
-      legacyCount: 497,
-      dynamicCount: 501,
-      staticDirectoryCount: 15,
-      dynamicDirectoryCount: 22,
+      legacyCount: 507,
+      dynamicCount: 511,
+      staticDirectoryCount: 16,
+      dynamicDirectoryCount: 23,
     });
     expect(DYNAMIC_MANAGEMENT_TOOL_NAMES).toEqual([
       "discover_tools",
@@ -90,7 +94,12 @@ describe("dynamic toolset documentation parity", () => {
       "reset_toolset",
     ]);
 
-    for (const text of Object.values(docs)) expectInventory(text);
+    for (const text of Object.values(docs)) {
+      expectInventory(text);
+      expect(text).toContain("apply_creative_card");
+      expect(text).toContain("508");
+      expect(text).toContain("512");
+    }
   });
 
   it("keeps README setup, management, risk, refresh, and recovery semantics explicit", () => {
@@ -146,6 +155,10 @@ describe("dynamic toolset documentation parity", () => {
 
   it("generates one effective macro description instead of the frozen misleading text", () => {
     const toolsReference = generateToolReference();
+    expect(toolsReference).toContain("**512 tool contracts**");
+    expect(toolsReference).toContain("511 are available in the default dynamic contract set");
+    expect(toolsReference).toContain("## Opt-in Creative RAG");
+    expect(toolsReference).toContain("### `apply_creative_card`");
     const macroSection = toolsReference.split("### `run_macro_script`")[1]?.split("\n## ", 1)[0];
     expect(macroSection).toContain(effectiveMacroDescription);
     expect(macroSection).not.toContain("allowRawPython` to opt-in");
@@ -230,7 +243,7 @@ describe("dynamic toolset documentation parity", () => {
       type: "integer",
       default: defaults.toolMaxActive,
       minimum: 1,
-      maximum: dynamicCount,
+      maximum: maximumToolCount,
     });
     expect(properties.toolMetadataBudgetKb).toMatchObject({
       type: "integer",

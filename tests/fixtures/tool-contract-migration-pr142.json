@@ -1,0 +1,38 @@
+{
+  "source": "97e60e24626c40fa36f829ce8fae441f3d3aa3bb",
+  "base_count": 497,
+  "static_count": 507,
+  "added_fingerprints": {
+    "edit_td_node_metadata": "0643a30d7d324c536251d38106a23c66ae1207ac27561ebabfcbad6ed8a103c3",
+    "find_td_parameters": "d5641345081a7ca86fb841dbc04b2edc4fbc2d23225b5751165f8523113e6ddc",
+    "get_editor_context": "9e21bb580e98c98c97c804bf3f43e24cf3226ac27c6e36c8a1eff2d1d0327cf7",
+    "get_td_docs": "1f83aa5f702a085e328e8b12f1b8061d28b125ef2a283ffd44813944852f68b0",
+    "insert_operator_at_selection": "f74d52e0ab5a556b48015fda7e357d31553cc6ccf80e19b1352ee87795940f51",
+    "manage_agent_skills": "11be2ed1a6955bf1d07fda3dd67b2b717f3659581ab822a4548503486414e094",
+    "manage_artist_workspace": "9a8bbc08c123881003b45865cc8d57adb3196fba94b11d239bb0dde2519cb551",
+    "manage_project_brief": "84cd3393ac636b93738949f8ab42b601bb9c4b1a23bbed229309debdcb37f5f8",
+    "pulse_td_parameter": "c07cfce67c2c4011f8da161b323f7496c86448272affa3afe4e28396a83417b0",
+    "save_td_project": "7148ca92e7f5ac79ee804176769b7c52fcbdde06fc54210585f94154fc521be6"
+  },
+  "changed_fingerprints": {
+    "add_custom_parameters": "6732554bedc0ce73bd87e180ddef344a28289c3301bbb2dffdd9e62903350e77",
+    "arrange_network": "4aa0738d7e3c028c2a789b7d7a63c57a69bbba59e51b259b02eb0b8da4b938bd",
+    "attach_docs_as_assets": "7b418be9f303feeb968e4411d3f6d6e739758f16012613a9417b1801d2728b33",
+    "copilot_vision": "35eb9eee45755c92c2f26051da2371bc4f0f25c40811a64a56fa9cbec7bfcbab",
+    "create_td_node": "36958a83416e908222c5d75ee48a35179ee381c47e059d5c544f0063874628a8",
+    "delete_td_node": "92fadd53ddd0bff01c2abce0491dafc02dde8eaa3a7a9862f38451344bea1f82",
+    "enhance_build": "f4e413a216df09ff0ea4b360b2383082e52f200f2ab48a51574231f6b5243505",
+    "find_td_nodes": "8bd2e2e4f7d87c142411cf78dac1910f4e8ba130a79065ab37cd98336cf398c4",
+    "focus_network_editor": "757d622793bef5ad855de32a126afa1960b9a7499292ccfb8640988677be1aa7",
+    "get_td_node_parameters": "b23143b5af8940650840ab730b790126e36a9423b5f01db54369354ad5f17860",
+    "get_td_nodes": "ae8c92d298b49532b64179a1a7894e0d60bf226082681f227247d86788fe3650",
+    "get_td_topology": "f46667796fe2f4d6f1ba4fa8691f095eddb98d0a4752ea54e3652f7d4a7eaac8",
+    "install_library_package": "76dcec2bb3bc59f789d411783e483dd103471078dcd39d1c6859d4d9f15da09f",
+    "make_portable_tox": "7e850f6807b37a1e6d7733bfe0bf6faf10d19306290409e2627a7fef7b871f36",
+    "manage_annotation": "b3ff9980935ee6eba626cd96bc38d517ef16d4f72543a5d8cc90ff09c459647e",
+    "manage_component": "e0057bedaadbdc174935dd874f1815579fffd6cb6dc04784a78521a6c31f2c5a",
+    "manage_packages": "4ddf570c8f50b7a91a00a931c648182c7b2250e57fb58cc94765ac1f1c04f2fc",
+    "plan_visual": "e274519847bd47efad579262e42ab2cef44b31819c7f0f148ee367ad56992117",
+    "validate_library_asset": "30a5e55704b013a307755850f4683cbc3014b4201143a9c39612a0e96cf244ad"
+  }
+}

@@ -9,7 +9,9 @@ import { PROTECTED_CORE_TOOL_NAMES } from "../../src/tools/toolsets/profiles.js"
 import { loadConfig } from "../../src/utils/config.js";
 import { silentLogger } from "../../src/utils/logger.js";
 
-const PORT = 39413;
+// Keep this distinct from every fixed port in httpTransport.test.ts so the
+// suites remain parallel-safe under coverage workers.
+const PORT = 39422;
 const URL = new globalThis.URL(`http://127.0.0.1:${PORT}/mcp`);
 
 type ClientCallResult = Awaited<ReturnType<Client["callTool"]>>;
@@ -87,7 +89,7 @@ describe("integration: dynamic toolsets over Streamable HTTP", () => {
       expect(structuredContent(selectedA)).toMatchObject({
         ok: true,
         current_profile: "build",
-        active_count: 92,
+        active_count: 91,
       });
       await waitForNotifications();
       expect({ notificationsA, notificationsB }).toEqual({ notificationsA: 1, notificationsB: 0 });
@@ -109,7 +111,7 @@ describe("integration: dynamic toolsets over Streamable HTTP", () => {
       const showListBeforeReset = await clientB.listTools();
       const buildNames = sortedToolNames(buildList.tools);
       const showNames = sortedToolNames(showListBeforeReset.tools);
-      expect(buildList.tools).toHaveLength(92);
+      expect(buildList.tools).toHaveLength(91);
       expect(showListBeforeReset.tools).toHaveLength(64);
       expect(buildNames).toContain("create_audio_reactive");
       expect(buildNames).not.toContain("create_setlist_runner");

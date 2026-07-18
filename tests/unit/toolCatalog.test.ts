@@ -139,11 +139,11 @@ describe("ToolCatalog", () => {
     expect(result.candidates[0]?.summary).not.toMatch(/opt[- ]?in/iu);
   });
 
-  it("preserves the immutable 497 legacy surface and exact 501 dynamic extension", () => {
+  it("preserves the approved 507-tool static surface and exact 511-tool dynamic extension", () => {
     const legacyNames = new Set(legacyCaptured.map((entry) => entry.name));
     const dynamicNames = new Set(dynamicCaptured.map((entry) => entry.name));
-    expect(legacyNames.size).toBe(497);
-    expect(dynamicNames.size).toBe(501);
+    expect(legacyNames.size).toBe(507);
+    expect(dynamicNames.size).toBe(511);
     for (const name of DYNAMIC_MANAGEMENT_TOOL_NAMES) expect(legacyNames).not.toContain(name);
     expect([...dynamicNames].filter((name) => !legacyNames.has(name)).sort()).toEqual(
       [...DYNAMIC_MANAGEMENT_TOOL_NAMES].sort(),

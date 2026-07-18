@@ -10,6 +10,7 @@ import {
   SAFE_PROFILE_EXCLUDE,
 } from "../../src/tools/toolsets/profiles.js";
 import baseline from "../fixtures/tool-contract-baseline.json" with { type: "json" };
+import migration from "../fixtures/tool-contract-migration-pr142.json" with { type: "json" };
 import approvedMembership from "../fixtures/tool-profile-membership.json" with { type: "json" };
 import { closeSessions, connectConfiguredClient, type ResourceClientSession } from "./helpers.js";
 
@@ -48,15 +49,19 @@ const LEGACY_DIRECTORY_TOOL_NAMES = [
   "list_recipes",
   "apply_recipe",
   "browse_library",
+  "get_td_docs",
 ] as const;
 
-const LEGACY_FULL_TOOL_NAMES = Object.keys(baseline.fingerprints).sort();
+const STATIC_FULL_TOOL_NAMES = [
+  ...Object.keys(baseline.fingerprints),
+  ...Object.keys(migration.added_fingerprints),
+].sort();
 const EXPECTED_FULL_TOOL_NAMES = sortedUnique([
-  ...LEGACY_FULL_TOOL_NAMES,
+  ...STATIC_FULL_TOOL_NAMES,
   ...DYNAMIC_MANAGEMENT_TOOL_NAMES,
 ]);
 const EXPECTED_SAFE_TOOL_NAMES = sortedUnique([
-  ...LEGACY_FULL_TOOL_NAMES.filter((name) => !SAFE_PROFILE_EXCLUDE.has(name)),
+  ...STATIC_FULL_TOOL_NAMES.filter((name) => !SAFE_PROFILE_EXCLUDE.has(name)),
   ...DYNAMIC_MANAGEMENT_TOOL_NAMES,
 ]);
 const EXPECTED_DIRECTORY_TOOL_NAMES = sortedUnique([
@@ -325,11 +330,11 @@ describe("integration: dynamic MCP toolsets", () => {
 
     const tools = await listTools(client);
     expect(sortedToolNames(tools)).toEqual(EXPECTED_DIRECTORY_TOOL_NAMES);
-    expect(tools).toHaveLength(22);
+    expect(tools).toHaveLength(23);
     await expectActiveMatches(client, tools);
   });
 
-  it("restores the exact 501-tool full startup surface after a compact transition", async () => {
+  it("restores the exact 511-tool full startup surface after a compact transition", async () => {
     const { client } = await connect({
       TDMCP_TOOL_PROFILE: "full",
       TDMCP_DYNAMIC_TOOLSETS: "on",
@@ -341,7 +346,7 @@ describe("integration: dynamic MCP toolsets", () => {
 
     const startupTools = await listTools(client);
     expect(sortedToolNames(startupTools)).toEqual(EXPECTED_FULL_TOOL_NAMES);
-    expect(startupTools).toHaveLength(501);
+    expect(startupTools).toHaveLength(511);
     await expectActiveMatches(client, startupTools);
 
     const compact = await client.callTool({
@@ -358,7 +363,7 @@ describe("integration: dynamic MCP toolsets", () => {
     expect(structuredContent(reset)).toMatchObject({
       ok: true,
       current_profile: "full",
-      active_count: 501,
+      active_count: 511,
     });
     await waitForNotifications();
     expect(notifications).toBe(2);
@@ -367,7 +372,7 @@ describe("integration: dynamic MCP toolsets", () => {
     await expectActiveMatches(client, restoredTools);
   });
 
-  it("restores the exact 462-tool safe startup surface despite ordinary budgets", async () => {
+  it("restores the exact 468-tool safe startup surface despite ordinary budgets", async () => {
     const { client } = await connect({
       TDMCP_TOOL_PROFILE: "safe",
       TDMCP_DYNAMIC_TOOLSETS: "on",
@@ -379,7 +384,7 @@ describe("integration: dynamic MCP toolsets", () => {
 
     const startupTools = await listTools(client);
     expect(sortedToolNames(startupTools)).toEqual(EXPECTED_SAFE_TOOL_NAMES);
-    expect(startupTools).toHaveLength(462);
+    expect(startupTools).toHaveLength(468);
     await expectActiveMatches(client, startupTools);
 
     const compact = await client.callTool({
@@ -395,7 +400,7 @@ describe("integration: dynamic MCP toolsets", () => {
     expect(structuredContent(reset)).toMatchObject({
       ok: true,
       current_profile: "safe",
-      active_count: 462,
+      active_count: 468,
     });
     await waitForNotifications();
     expect(notifications).toBe(2);

@@ -103,14 +103,17 @@ and passes `TDMCP_DYNAMIC_TOOLSETS`, `TDMCP_TOOL_MAX_ACTIVE`, and
 `TDMCP_TOOL_METADATA_BUDGET_KB` through to the server. MCPB and Smithery keep the
 package defaults `full` / dynamic `off` / 120 / 256.
 
-The MCP registry manifest intentionally defaults to `directory`, raw Python `off`, and dynamic mode `off`, so its scanner receives the compact static surface. The `directory` inventory is static 15 / dynamic 22. A client that explicitly turns dynamic mode on receives the protected 22-tool union instead. This registry default is an introspection limitation, not a different package capability.
+The MCP registry manifest intentionally defaults to `directory`, raw Python `off`, and dynamic mode `off`, so its scanner receives the compact static surface. The `directory` inventory is static 16 / dynamic 23. A client that explicitly turns dynamic mode on receives the protected 23-tool union instead. This registry default is an introspection limitation, not a different package capability.
 
-The fixed legacy full surface contains 497 tools. Dynamic full adds only
+The complete static full surface contains 507 tools. Dynamic full adds only
 `discover_tools`, `select_toolset`, `get_active_toolset`, and `reset_toolset`, for
-501 total, and exists only as a startup/reset compatibility state. It is not a
+511 total, and exists only as a startup/reset compatibility state. It is not a
 compact selection target. Dynamic presets do not include raw-code or destructive
 tools; explicit risky selection still requires the exact name,
 `include_risky: true`, and the existing approval/environment gates.
+Enabling `TDMCP_RAG_APPLY_CARD=1` adds the separately locked
+`apply_creative_card` contract: `full` becomes static 508 / dynamic 512 and
+`safe` becomes 465 / 469, while `core` and `directory` stay unchanged.
 
 `client_refresh_required: true` is a hint rather than an acknowledgment. For a
 client that does not refresh after `tools/list_changed`, choose a static profile

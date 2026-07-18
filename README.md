@@ -148,8 +148,9 @@ the [prompt cookbook](https://pantani.github.io/tdmcp/guide/prompt-cookbook).
 
 ## What you can do
 
-**497 legacy tools** across three layers, plus foundation primitives, CLI automation,
-library/packaging, AI session memory and Obsidian vault integrations — from one-line artist generators
+**507 static tools by default** across three layers, plus foundation primitives, CLI automation,
+library/packaging, AI session memory and
+Obsidian vault integrations — from one-line artist generators
 (`create_feedback_network`, `create_audio_reactive`, `create_particle_system`,
 `create_generative_art`, …) to building blocks (`create_control_panel`,
 `animate_parameter`, `create_external_io` for OSC/MIDI/DMX/NDI, …) down to
@@ -164,8 +165,11 @@ always-current
 The package remains backward-compatible: `TDMCP_TOOL_PROFILE=full`,
 `TDMCP_DYNAMIC_TOOLSETS=off`, `TDMCP_TOOL_MAX_ACTIVE=120`, and
 `TDMCP_TOOL_METADATA_BUDGET_KB=256` are the defaults. Static `full` exposes the
-same 497 legacy tools. Turning dynamic mode on adds four management tools, so a
-dynamic `full` startup/reset surface contains 501 tools. The `directory` profile contains static 15 / dynamic 22 tools. Dynamic `full` is a startup/reset compatibility state and is not selectable from a compact session.
+same 507 tools. Turning dynamic mode on adds four management tools, so a
+dynamic `full` startup/reset surface contains 511 tools. The `directory` profile contains static 16 / dynamic 23 tools. Dynamic `full` is a startup/reset compatibility state and is not selectable from a compact session.
+Opting into `TDMCP_RAG_APPLY_CARD=1` adds `apply_creative_card`, yielding static
+508 / dynamic 512 for `full` (and 465 / 469 for `safe`); compact `core` and
+`directory` counts do not change.
 
 For a personal compact Codex connection, start with the protected 17-tool core:
 

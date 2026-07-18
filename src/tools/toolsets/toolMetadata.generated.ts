@@ -7,8 +7,8 @@ import type { GeneratedToolMetadataEntry } from "./types.js";
 
 export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
   add_custom_parameters: {
-    bytes: 2428,
-    fingerprint: "214caf6c3293dbdd11d0ec8019dded07727f52de96152380e73e0784208a759a",
+    bytes: 5333,
+    fingerprint: "6732554bedc0ce73bd87e180ddef344a28289c3301bbb2dffdd9e62903350e77",
   },
   add_timecode_overlay: {
     bytes: 2405,
@@ -43,16 +43,16 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     fingerprint: "7e6bedeefd297255832bf8906050e3b15d196036c9e3fa9d90751e3469895cb2",
   },
   arrange_network: {
-    bytes: 1209,
-    fingerprint: "62961edaac6fe50f8cd9f9d6baa04b3ea3102b38b77cda96f9caf366245f8b34",
+    bytes: 2561,
+    fingerprint: "4aa0738d7e3c028c2a789b7d7a63c57a69bbba59e51b259b02eb0b8da4b938bd",
   },
   atem_switcher_control: {
     bytes: 1243,
     fingerprint: "206ef263eb684ca7f0e2b6eee9af88c1b2d07a6039e45e42a9e23462546281e7",
   },
   attach_docs_as_assets: {
-    bytes: 716,
-    fingerprint: "83b4c2137c849c4a16c1dfb2164dd87d105bc1ae9e6d8f0e61256056af37b372",
+    bytes: 1487,
+    fingerprint: "7b418be9f303feeb968e4411d3f6d6e739758f16012613a9417b1801d2728b33",
   },
   audio_fingerprint_to_visual: {
     bytes: 2528,
@@ -523,8 +523,8 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     fingerprint: "a5f3b21912afb535d186a4a19a30e939e5e089c3d885a9e27254eab4dd4fdb47",
   },
   copilot_vision: {
-    bytes: 1606,
-    fingerprint: "9d7d1526de0af30d37cf1512bd306efc2bb9d8569617cea105bc96ce9a579f88",
+    bytes: 1847,
+    fingerprint: "35eb9eee45755c92c2f26051da2371bc4f0f25c40811a64a56fa9cbec7bfcbab",
   },
   create_3d_audio_reactive: {
     bytes: 3080,
@@ -1211,8 +1211,8 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     fingerprint: "0091a1d64e325e1596c94960f756996925d4319836bbccf0f16d40bdaf150cfe",
   },
   create_td_node: {
-    bytes: 1222,
-    fingerprint: "645f3e8c409c482bd1d80f3d92b35b403ddb230cfe5e8a63f143ef7fa04db8d6",
+    bytes: 1829,
+    fingerprint: "36958a83416e908222c5d75ee48a35179ee381c47e059d5c544f0063874628a8",
   },
   create_tempo_sync: {
     bytes: 1411,
@@ -1335,8 +1335,8 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     fingerprint: "54da04480c504b3fc67f98dec3c3431bfc3b793f29a6a7c378e3a1bf03073bad",
   },
   delete_td_node: {
-    bytes: 1090,
-    fingerprint: "108433e739f299e81f37e3650e89027d208d6bc48631b08e60d3bd54181f1594",
+    bytes: 1432,
+    fingerprint: "92fadd53ddd0bff01c2abce0491dafc02dde8eaa3a7a9862f38451344bea1f82",
   },
   detect_onsets: {
     bytes: 3138,
@@ -1406,13 +1406,17 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     bytes: 2420,
     fingerprint: "34863ecafcff767ace9117a9cd44d1e9c98d420fb219564cc2d23368cd427cd1",
   },
+  edit_td_node_metadata: {
+    bytes: 1807,
+    fingerprint: "0643a30d7d324c536251d38106a23c66ae1207ac27561ebabfcbad6ed8a103c3",
+  },
   elicit_missing_args: {
     bytes: 2100,
     fingerprint: "f6405a4aae61c39be10e194ea781e4021f37002460b07b82d873e9b399ac3ae1",
   },
   enhance_build: {
-    bytes: 2314,
-    fingerprint: "4b25f147a9e91bd8f041843344d17a80b03de60170f3943d4f1dff1d79a69c9f",
+    bytes: 7785,
+    fingerprint: "f4e413a216df09ff0ea4b360b2383082e52f200f2ab48a51574231f6b5243505",
   },
   exec_node_method: {
     bytes: 922,
@@ -1467,12 +1471,16 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     fingerprint: "6d575a748e9fdecd630ff58c1567b363d6ba6fa60ba4ec8824e5c6027be6ebf7",
   },
   find_td_nodes: {
-    bytes: 2411,
-    fingerprint: "b80d1d88a49ab162fec7afcda8ed8ce736b808ab74a45846dc62bbf932f65f24",
+    bytes: 4279,
+    fingerprint: "8bd2e2e4f7d87c142411cf78dac1910f4e8ba130a79065ab37cd98336cf398c4",
+  },
+  find_td_parameters: {
+    bytes: 4529,
+    fingerprint: "d5641345081a7ca86fb841dbc04b2edc4fbc2d23225b5751165f8523113e6ddc",
   },
   focus_network_editor: {
-    bytes: 937,
-    fingerprint: "61657cc2289cdd64ba403edd25fd4704bb25bc680636926dafa5b89e11f37ec0",
+    bytes: 1782,
+    fingerprint: "757d622793bef5ad855de32a126afa1960b9a7499292ccfb8640988677be1aa7",
   },
   generate_from_moodboard: {
     bytes: 1265,
@@ -1501,6 +1509,10 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
   get_dat_content: {
     bytes: 1739,
     fingerprint: "1f11c92a72aa2b91d6e993c7f56c93ec385b5107fe04fe9edfff382754e0f17e",
+  },
+  get_editor_context: {
+    bytes: 679,
+    fingerprint: "9e21bb580e98c98c97c804bf3f43e24cf3226ac27c6e36c8a1eff2d1d0327cf7",
   },
   get_inline_preview: {
     bytes: 4063,
@@ -1534,6 +1546,10 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     bytes: 691,
     fingerprint: "54acdd312d5f1985028b84ac802ac7eefb935d6a422cf429ed57371481067151",
   },
+  get_td_docs: {
+    bytes: 4556,
+    fingerprint: "1f83aa5f702a085e328e8b12f1b8061d28b125ef2a283ffd44813944852f68b0",
+  },
   get_td_info: {
     bytes: 706,
     fingerprint: "59d9f57c92afd86b59a7d38adf521797297309be2b8c65bc8d87bb8764c4e547",
@@ -1547,20 +1563,20 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     fingerprint: "c3c3fc83b91a95ffc4f2f5477593f8bee0cc7846c235222d7d76d54410e1044e",
   },
   get_td_node_parameters: {
-    bytes: 2645,
-    fingerprint: "fdfb22fa2bdff8cc35ea817a61320c5e343e2da0aec3d55c85bcdf928bfa2d61",
+    bytes: 2705,
+    fingerprint: "b23143b5af8940650840ab730b790126e36a9423b5f01db54369354ad5f17860",
   },
   get_td_nodes: {
-    bytes: 3234,
-    fingerprint: "e46356e1a7b970254bda6a79c2b405f1abc0cf0138e035e07350e6167e406475",
+    bytes: 3346,
+    fingerprint: "ae8c92d298b49532b64179a1a7894e0d60bf226082681f227247d86788fe3650",
   },
   get_td_performance: {
     bytes: 2436,
     fingerprint: "322fb6f922615013fdb57a988746cbd3db272ef5c17f8b937460fb0dcd1e7615",
   },
   get_td_topology: {
-    bytes: 2532,
-    fingerprint: "6d7ffe8a4df07bf1cd2741efd461b520a0df0d4fb1d8c3de402bc3c8e790afe6",
+    bytes: 2644,
+    fingerprint: "f46667796fe2f4d6f1ba4fa8691f095eddb98d0a4752ea54e3652f7d4a7eaac8",
   },
   get_technique_detail: {
     bytes: 2209,
@@ -1598,6 +1614,10 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     bytes: 2535,
     fingerprint: "b95f1a99f885f07de6d85ec90120d38a25fb17302bf6c4f0591f922109f8cfae",
   },
+  insert_operator_at_selection: {
+    bytes: 4591,
+    fingerprint: "f74d52e0ab5a556b48015fda7e357d31553cc6ccf80e19b1352ee87795940f51",
+  },
   inspect_component_manifest: {
     bytes: 616,
     fingerprint: "fa1c86e5b872cfb79a91f8f346eb587789455f0f4adca6d843c55afebe0f644e",
@@ -1611,8 +1631,8 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     fingerprint: "daaca3313093ef046461b75cf96904634b7c67d3708cc0054bf2d612f5f74c0d",
   },
   install_library_package: {
-    bytes: 1132,
-    fingerprint: "52e8119e090b46304cbe8d74a4b7b1852c38dd905bcb61eaee86bae3ea700082",
+    bytes: 1512,
+    fingerprint: "76dcec2bb3bc59f789d411783e483dd103471078dcd39d1c6859d4d9f15da09f",
   },
   learn_control: {
     bytes: 2405,
@@ -1659,20 +1679,28 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     fingerprint: "01428660b75ebddc715a768cd67008a78df896efe3892029072abb7926066ba0",
   },
   make_portable_tox: {
-    bytes: 1474,
-    fingerprint: "a4850188b0acd462a874ab6b91c384e1a0c0bb0519e2816133212d7575a864e6",
+    bytes: 2878,
+    fingerprint: "7e850f6807b37a1e6d7733bfe0bf6faf10d19306290409e2627a7fef7b871f36",
+  },
+  manage_agent_skills: {
+    bytes: 3637,
+    fingerprint: "11be2ed1a6955bf1d07fda3dd67b2b717f3659581ab822a4548503486414e094",
   },
   manage_annotation: {
-    bytes: 1582,
-    fingerprint: "c2b33780bc6c68b510a3354707bd8b47105e8707b65390089be44c883f4911fc",
+    bytes: 2247,
+    fingerprint: "b3ff9980935ee6eba626cd96bc38d517ef16d4f72543a5d8cc90ff09c459647e",
+  },
+  manage_artist_workspace: {
+    bytes: 4977,
+    fingerprint: "9a8bbc08c123881003b45865cc8d57adb3196fba94b11d239bb0dde2519cb551",
   },
   manage_checkpoint: {
     bytes: 1532,
     fingerprint: "5e51e5189f17d5b0a204000186a3546ab42acd82cb6ae642741ea0fe72652c05",
   },
   manage_component: {
-    bytes: 1794,
-    fingerprint: "37c798973892d8b91d72d70c19a864b2933dc7455891aa560fb5ab5b4fa74d27",
+    bytes: 2255,
+    fingerprint: "e0057bedaadbdc174935dd874f1815579fffd6cb6dc04784a78521a6c31f2c5a",
   },
   manage_component_storage: {
     bytes: 1060,
@@ -1683,12 +1711,16 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     fingerprint: "708464aa654e10dc796bba6159f22511628354ea897b9a6ab7603775e707b88f",
   },
   manage_packages: {
-    bytes: 2182,
-    fingerprint: "5c123e8ae9666c2673484892f530b29c59820da72acd7534b5ac2552e478e630",
+    bytes: 3069,
+    fingerprint: "4ddf570c8f50b7a91a00a931c648182c7b2250e57fb58cc94765ac1f1c04f2fc",
   },
   manage_presets: {
     bytes: 1137,
     fingerprint: "eaa854660dcde0685ce38e48557f8a17d4ade559532aa242231e09a2b8ad930f",
+  },
+  manage_project_brief: {
+    bytes: 3824,
+    fingerprint: "84cd3393ac636b93738949f8ab42b601bb9c4b1a23bbed229309debdcb37f5f8",
   },
   marketplace_index_seed: {
     bytes: 2784,
@@ -1739,8 +1771,8 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     fingerprint: "f23b9a26e614986ea5cba1ed6c124121d4de8a609d56e88655ea58114ea549e3",
   },
   plan_visual: {
-    bytes: 723,
-    fingerprint: "9952391ad5f391ed0383f825b9ffd318f6dec5a5dca7640871fc1bcd931c4f7f",
+    bytes: 3461,
+    fingerprint: "e274519847bd47efad579262e42ab2cef44b31819c7f0f148ee367ad56992117",
   },
   post_passes_3d: {
     bytes: 2483,
@@ -1765,6 +1797,10 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
   publish_recipe_bundle: {
     bytes: 1595,
     fingerprint: "5aa1c874b257070ce58514a04d88c96c86b7518f2ce80794d92c5ce4a483fc3f",
+  },
+  pulse_td_parameter: {
+    bytes: 853,
+    fingerprint: "c07cfce67c2c4011f8da161b323f7496c86448272affa3afe4e28396a83417b0",
   },
   qlab_osc_bridge: {
     bytes: 1212,
@@ -1829,6 +1865,10 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
   save_recipe_to_vault: {
     bytes: 2367,
     fingerprint: "aa31994b2134189642fca2deb6d4bb528d8c05dcc58ddf14c969512b83dbc423",
+  },
+  save_td_project: {
+    bytes: 1026,
+    fingerprint: "7148ca92e7f5ac79ee804176769b7c52fcbdde06fc54210585f94154fc521be6",
   },
   scaffold_extension: {
     bytes: 1450,
@@ -1979,8 +2019,8 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     fingerprint: "4b88492d04b6a233c69d6f8c32a30cd52cf6c2c1103d738748792b6fabf7007f",
   },
   validate_library_asset: {
-    bytes: 657,
-    fingerprint: "b6824d70b22ae0effe0d1eff52d3756b15556790d28c69f86356e5784f0c25fc",
+    bytes: 2821,
+    fingerprint: "30a5e55704b013a307755850f4683cbc3014b4201143a9c39612a0e96cf244ad",
   },
   validate_operator_chain: {
     bytes: 3401,
@@ -2009,5 +2049,13 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
   write_agent_guide: {
     bytes: 1823,
     fingerprint: "9bb173124d394f5deb44939f35fb056214d3ee0c88afed60f45a2cffb9a71a22",
+  },
+};
+
+/** Opt-in tools that are absent from the default static and dynamic surfaces. */
+export const OPTIONAL_TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
+  apply_creative_card: {
+    bytes: 1250,
+    fingerprint: "9b36400c24c2148900518394331abcd0e5c23c19269e2c2d84b5f3be9d8be930",
   },
 };

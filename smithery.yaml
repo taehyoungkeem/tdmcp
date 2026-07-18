@@ -52,7 +52,7 @@ startCommand:
         type: integer
         default: 120
         minimum: 1
-        maximum: 501
+        maximum: 512
         description: Maximum active tools in an ordinary dynamic selection.
       toolMetadataBudgetKb:
         type: integer

@@ -59,6 +59,7 @@ export function buildToolContext(
       : undefined);
   return {
     client: connection.client,
+    ...(config.bridgeToken !== undefined ? { bridgeToken: config.bridgeToken } : {}),
     knowledge,
     recipes,
     logger,
@@ -70,6 +71,9 @@ export function buildToolContext(
     dynamicToolsets: config.dynamicToolsets === "on",
     toolMaxActive: config.toolMaxActive,
     toolMetadataBudgetBytes: config.toolMetadataBudgetKb * 1024,
+    projectRoot: config.projectRoot,
+    copilotReceipts: config.copilotReceipts,
+    copilotReceiptsPath: config.copilotReceiptsPath,
     creativeRag,
     projectRag,
   };

@@ -10,10 +10,14 @@ import {
   fingerprintTool,
   serializedToolListBytesFromEntries,
 } from "../../src/tools/toolsets/metadata.js";
-import { TOOL_METADATA } from "../../src/tools/toolsets/toolMetadata.generated.js";
+import {
+  OPTIONAL_TOOL_METADATA,
+  TOOL_METADATA,
+} from "../../src/tools/toolsets/toolMetadata.generated.js";
 import { loadConfig } from "../../src/utils/config.js";
 import { silentLogger } from "../../src/utils/logger.js";
 import baseline from "../fixtures/tool-contract-baseline.json" with { type: "json" };
+import migration from "../fixtures/tool-contract-migration-pr142.json" with { type: "json" };
 
 const APPLY_CREATIVE_CARD = "apply_creative_card";
 const GENERATED_METADATA_PATH = join(process.cwd(), "src/tools/toolsets/toolMetadata.generated.ts");
@@ -66,12 +70,23 @@ describe("tool metadata", () => {
     expect(serializedToolListBytesFromEntries([3, 5])).toBe(12 + 3 + 1 + 5);
   });
 
-  it("locks the original full surface at 497 names and fingerprints", () => {
+  it("preserves the 497-tool history and locks the approved PR #142 contract migration", () => {
     expect(baseline.count).toBe(497);
     expect(Object.keys(baseline.fingerprints)).toHaveLength(497);
+    expect(migration.base_count).toBe(497);
+    expect(migration.static_count).toBe(507);
+    expect(Object.keys(migration.added_fingerprints)).toHaveLength(10);
+    expect(Object.keys(migration.changed_fingerprints)).toHaveLength(19);
     for (const [name, fingerprint] of Object.entries(baseline.fingerprints)) {
+      expect(TOOL_METADATA[name]?.fingerprint).toBe(
+        migration.changed_fingerprints[name as keyof typeof migration.changed_fingerprints] ??
+          fingerprint,
+      );
+    }
+    for (const [name, fingerprint] of Object.entries(migration.added_fingerprints)) {
       expect(TOOL_METADATA[name]?.fingerprint).toBe(fingerprint);
     }
+    expect(Object.keys(TOOL_METADATA)).toHaveLength(511);
   });
 
   it("assembles RAG apply-card off then on without leaking registration state", async () => {
@@ -86,6 +101,21 @@ describe("tool metadata", () => {
     const offNames = await assembledToolNames({ TDMCP_RAG_APPLY_CARD: "0" });
 
     expectOnlyApplyCardDiff(offNames, onNames);
+  });
+
+  it("starts dynamic full with the opt-in RAG apply-card contract", async () => {
+    expect(Object.keys(OPTIONAL_TOOL_METADATA)).toEqual([APPLY_CREATIVE_CARD]);
+    expect(OPTIONAL_TOOL_METADATA[APPLY_CREATIVE_CARD]?.fingerprint).toBe(
+      "9b36400c24c2148900518394331abcd0e5c23c19269e2c2d84b5f3be9d8be930",
+    );
+
+    const names = await assembledToolNames({
+      TDMCP_RAG_APPLY_CARD: "1",
+      TDMCP_DYNAMIC_TOOLSETS: "on",
+      TDMCP_TOOL_PROFILE: "full",
+    });
+    expect(names).toHaveLength(512);
+    expect(names).toContain(APPLY_CREATIVE_CARD);
   });
 
   it("keeps an unrelated sentinel secret out of generated output and logs", () => {
