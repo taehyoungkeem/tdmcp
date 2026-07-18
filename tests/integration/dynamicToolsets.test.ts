@@ -172,6 +172,17 @@ describe("integration: dynamic MCP toolsets", () => {
     for (const tool of managementTools) {
       expect(tool.outputSchema?.type).toBe("object");
     }
+    const selectTool = managementTools.find((tool) => tool.name === "select_toolset");
+    expect(selectTool).toBeDefined();
+    const selectPresetEnum = (
+      selectTool?.inputSchema as
+        | {
+            properties?: { preset?: { enum?: string[] } };
+          }
+        | undefined
+    )?.properties?.preset?.enum;
+    expect(selectPresetEnum).toContain("core");
+    expect(selectPresetEnum).not.toContain("full");
 
     const withoutManagement = tools.filter(
       (tool) => !DYNAMIC_MANAGEMENT_TOOL_NAME_SET.has(tool.name),
@@ -179,12 +190,18 @@ describe("integration: dynamic MCP toolsets", () => {
     expect(bytes).toBeGreaterThan(metadataBytes(withoutManagement));
     await expectActiveMatches(client, tools);
 
+    let notifications = 0;
+    client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+      notifications += 1;
+    });
     const disabled = await client.callTool({
       name: "create_audio_reactive",
       arguments: {},
     });
     expect(disabled.isError).toBe(true);
     expect(textContent(disabled)).toContain("Tool create_audio_reactive disabled");
+    await waitForNotifications();
+    expect(notifications).toBe(0);
     await expectUnchangedList(client, tools);
   });
 
@@ -403,9 +420,12 @@ describe("integration: dynamic MCP toolsets", () => {
       arguments: { preset: "full" },
     });
     expect(full.isError).toBe(true);
+    expect(textContent(full)).toContain("Input validation error");
+    expect(textContent(full)).toContain("Invalid arguments for tool select_toolset");
     await waitForNotifications();
     expect(notifications).toBe(0);
     await expectUnchangedList(client, before);
+    await expectActiveMatches(client, before);
 
     const safe = await client.callTool({
       name: "select_toolset",
