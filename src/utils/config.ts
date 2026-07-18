@@ -84,11 +84,8 @@ function ragEnabledFlag(value: unknown): boolean | undefined {
 const RagEnabledSchema = z.preprocess(ragEnabledFlag, z.boolean().default(false));
 
 /**
- * Centralized "boolean-ish env" parser for Creative RAG feature flags. Both
- * config.ts (parsed config) and call sites that read env BEFORE config is built
- * (tool registration, Layer 2 index) must agree on what counts as enabled —
- * accept "1" or "true" (case-insensitive), trim whitespace. Anything else →
- * disabled. Keep this in sync with `ragEnabledFlag` above.
+ * Parses a raw Creative RAG feature flag without constructing the full config.
+ * Keep the accepted values aligned with `ragEnabledFlag` above.
  */
 export function isRagFeatureFlagEnabled(value: string | undefined): boolean {
   if (value === undefined || value === null) return false;

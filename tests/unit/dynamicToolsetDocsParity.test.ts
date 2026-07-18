@@ -161,6 +161,12 @@ describe("dynamic toolset documentation parity", () => {
     expect(configSource).not.toContain(
       "tool index and CLI registry still read `process.env.TDMCP_RAG_APPLY_CARD`",
     );
+    expect(configSource).not.toContain("call sites that read env BEFORE config is built");
+    expect(configSource).not.toContain("tool registration, Layer 2 index");
+    expect(configSource).toContain(
+      "Parses a raw Creative RAG feature flag without constructing the full config.",
+    );
+    expect(configSource).toContain("Keep the accepted values aligned with `ragEnabledFlag` above.");
   });
 
   it("keeps MCPB, registry, and Smithery choices/defaults in parity", () => {
