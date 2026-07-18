@@ -18,7 +18,9 @@ This project adds session-local, native MCP toolset selection. A compact core is
 visible at startup; the client searches the complete internal catalog and activates
 the real tools it needs. Activation uses the official TypeScript SDK's registered
 tool lifecycle and `tools/list_changed` notification. Tool names, input and output
-schemas, annotations, handlers, and Codex approval boundaries remain intact.
+schemas, annotations, handlers, and Codex approval boundaries remain intact, except
+for the bounded correction of the independently verified pre-existing macro
+nested-dispatch defect described below.
 
 The same wave adds pinned MCP Inspector and MCP Conformance checks, deterministic
 tool-discovery evaluations, and metadata budgets. It does not copy whole external
@@ -98,7 +100,9 @@ generation migration with toolset work.
 - Adding ToolHive, Docker, Kubernetes, an embedding model, or an external vector
   database as a runtime dependency.
 - Hiding all tool calls behind an `invoke_tool` or arbitrary dispatch tool.
-- Changing any of the 497 existing tool implementations in the first wave.
+- Changing any of the 497 existing tool implementations in the first wave, except
+  for the bounded `run_macro_script` nested-dispatch safety correction required by
+  this design.
 - Claiming TouchDesigner, GPU, camera, DMX, mixer, or venue validation without
   running that hardware.
 - Publishing, tagging, pushing, or changing upstream release policy.
@@ -112,9 +116,13 @@ The npm package retains its existing defaults and exact legacy surface:
 
 When dynamic mode is off, the four management tools are not registered. Therefore
 legacy `full`, `safe`, and `directory` remain exactly 497, 458, and 15 tools. When
-dynamic mode is on, the four protected management tools are registered and unioned
-into the selected profile. Dynamic `full`, `safe`, and `directory` therefore expose
-501, 462, and 19 tools respectively, while preserving all legacy tool contracts.
+dynamic mode is on, the four protected management tools and all protected existing
+core tools are unioned into the selected profile. Dynamic `full` and `safe` therefore
+expose 501 and 462 tools. Dynamic `directory` is the exact union of the legacy
+15-tool directory surface and the protected 17-tool core: 22 tools, because
+`get_preview`, `get_td_node_errors`, and `summarize_td_errors` are protected but are
+not in the legacy directory profile. Dynamic `full` is a startup/reset compatibility
+state only; it is never selectable from a compact session.
 
 The owner's Codex configuration changes only after implementation and verification:
 
@@ -133,8 +141,8 @@ New configuration fields are:
 | Variable | Package default | Meaning |
 | --- | --- | --- |
 | `TDMCP_DYNAMIC_TOOLSETS` | `off` | Enables session-local management tools and runtime toolset changes |
-| `TDMCP_TOOL_MAX_ACTIVE` | `120` | Maximum active tools in dynamic mode; `full` explicitly bypasses it |
-| `TDMCP_TOOL_METADATA_BUDGET_KB` | `256` | Maximum serialized metadata for a dynamic selection |
+| `TDMCP_TOOL_MAX_ACTIVE` | `120` | Maximum active tools in dynamic mode; only initialization/reset to a `full` startup state bypasses it |
+| `TDMCP_TOOL_METADATA_BUDGET_KB` | `256` | Maximum serialized metadata for a dynamic selection; only initialization/reset to a `full` startup state bypasses it |
 
 Invalid values fail through the existing configuration validation path. The core
 profile also has a non-configurable CI acceptance ceiling of 20 tools and 64 KiB.
@@ -237,10 +245,12 @@ are not silently shortened or weakened to satisfy the budget.
 - `safe`: unchanged 458-tool legacy behavior in static mode; dynamic mode adds the
   four protected management tools.
 - `directory`: unchanged exact 15-tool registry-facing surface in static mode;
-  dynamic mode adds the four protected management tools so the session can leave
-  the profile without a restart.
-- `full`: unchanged 497-tool legacy surface in static mode and explicit budget
-  bypass; dynamic mode adds the four protected management tools.
+  dynamic mode exposes the exact 22-tool union of that legacy surface and the
+  protected core so the session can leave the profile without a restart.
+- `full`: unchanged 497-tool legacy surface in static mode. Dynamic mode adds the
+  four protected management tools, but this 501-tool state exists only when the
+  session starts in `full` and when that same session resets to its startup state.
+  It cannot be selected from a compact session.
 
 Preset membership is explicit and snapshot-tested. It is not inferred at runtime
 from naming conventions alone.
@@ -248,7 +258,12 @@ from naming conventions alone.
 ## MCP management tools
 
 All four new tools have Zod input schemas, Zod output schemas, structured content,
-concise text summaries, and non-destructive annotations.
+concise text summaries, and non-destructive annotations. Every advertised result is
+a discriminated envelope: `ok: true` for success or `ok: false` with a stable error
+code and code-specific allowlisted public details. Profile state is one of the eight
+configured profile names or `custom`: preset replacement reports that preset,
+explicit replacement and every add report `custom`, and reset reports the startup
+profile.
 
 ### `discover_tools`
 
@@ -286,7 +301,7 @@ Input:
 
 ```ts
 {
-  preset?: "core" | "inspect" | "build" | "show" | "library" | "safe" | "directory" | "full";
+  preset?: "core" | "inspect" | "build" | "show" | "library" | "safe" | "directory";
   tools?: string[];
   mode?: "replace" | "add"; // default replace
   include_risky?: boolean;  // default false
@@ -296,7 +311,8 @@ Input:
 Exactly one of `preset` or `tools` is required. `include_risky` is valid only with
 an explicit `tools` list; it cannot make a preset risky. The result reports the
 previous and current profile, active count, metadata bytes, added and removed tool
-names, warnings, and `client_refresh_required: true`.
+names, warnings, and `client_refresh_required: true`. `full` is deliberately absent
+from the selector schema; only startup and reset may establish a dynamic full state.
 
 ### `get_active_toolset`
 
@@ -321,7 +337,8 @@ Every transition follows this order:
    activated when `TDMCP_RAW_PYTHON=off`, regardless of `include_risky`.
 6. Calculate the exact count and generated serialized-metadata budget.
 7. Reject an over-budget selection with the largest metadata contributors and
-   smaller preset suggestions. Explicit `full` is the only bypass.
+   smaller preset suggestions. Only initialization or reset to a session whose
+   startup profile is `full` bypasses the ordinary budgets.
 8. Compute the complete before/after enabled-state map.
 9. Apply enabled states as one in-process transaction and emit one
    `tools/list_changed` notification.
@@ -339,14 +356,22 @@ selected at process startup.
 
 Original handlers remain the authorization boundary. Dynamic selection never
 executes a selected tool, weakens its schema, changes its annotation, or bypasses
-Codex's per-tool approval configuration.
+Codex's per-tool approval configuration. `run_macro_script` is the only existing
+direct nested-dispatch path and must enforce the same-session active set before each
+entry, reject every raw-code or destructive target even when active, and validate
+the target arguments against its captured input contract before invoking the safe
+handler. Invalid, inactive, raw-code, or destructive entries never reach their
+handlers and cannot change state; the raw-Python environment gate remains
+authoritative as defense in depth.
 
 ## Metadata generation and drift control
 
-A build-time generator assembles the real server with dynamic mode disabled,
-connects an in-memory MCP client, calls `tools/list`, and records per-tool
-serialized bytes plus stable schema fingerprints. The committed generated manifest
-is the runtime source for byte-budget validation.
+A build-time generator assembles the real server under an explicit allowlisted
+environment, connects an in-memory MCP client, calls `tools/list`, and records
+per-tool serialized bytes plus stable schema fingerprints. Every registration
+admission decision, including `TDMCP_RAG_APPLY_CARD`, comes from parsed
+`ToolContext`; registrar arrays are never mutated from module-global `process.env`.
+The committed generated manifest is the runtime source for byte-budget validation.
 
 The generator has two commands:
 
@@ -357,6 +382,8 @@ The generator has two commands:
 This follows the conformance project's useful traceability principle: measure the
 assembled runtime surface rather than attempting to infer it from source text.
 Generated metadata must not contain secrets, environment values, or handler code.
+Same-process off/on and on/off construction tests prove order independence, and a
+sentinel secret key/value test proves neither generated output nor logs retain it.
 
 ## Data flow examples
 
@@ -391,8 +418,8 @@ Generated metadata must not contain secrets, environment values, or handler code
 
 ## Error handling
 
-All management-tool failures return `isError: true`, concise text, and structured
-details. Error codes are stable strings suitable for tests and clients:
+All management-tool failures return `isError: true`, concise text, and a structured
+`ok: false` envelope. Error codes are stable strings suitable for tests and clients:
 
 - `dynamic_toolsets_disabled`
 - `invalid_selection`
@@ -405,8 +432,10 @@ details. Error codes are stable strings suitable for tests and clients:
 - `toolset_transition_failed`
 
 Unknown-tool errors include close matches. Budget errors include requested counts,
-bytes, limits, largest contributors, and suggested presets. No error path exposes
-environment secrets or complete tool schemas.
+bytes, limits, largest contributors, and suggested presets. Error serialization is
+code-specific and allowlists only public tool names, counts, limits, close matches,
+and metadata contributors. No arbitrary error object is spread into a result or log;
+sentinel token, path, schema, and handler strings must remain absent from both.
 
 ## Verification design
 
@@ -424,11 +453,18 @@ check is never promoted to `PASS` unless it actually ran.
 - count and metadata budget rejection;
 - atomic failure with zero active-state changes;
 - reset behavior;
-- stable error codes and redacted messages.
+- stable error codes, discriminated success/error parsing, `custom` profile-state
+  semantics, and allowlisted redaction;
+- synchronous transition calls execute in call-arrival order without inventing
+  asynchronous lifecycle handles;
+- macro replay permits only active safe targets and validates target inputs before
+  invocation.
 
 ### MCP integration tests
 
 - initial `core` list has exactly the approved 17 tools;
+- dynamic `directory` is the exact 22-name union of legacy directory and protected
+  core, while static `directory` remains exactly 15;
 - serialized core metadata is at most 65,536 bytes;
 - every preset is at most 120 tools and 262,144 bytes;
 - `build`, `show`, and `library` contain zero raw/destructive tools by default;
@@ -436,7 +472,9 @@ check is never promoted to `PASS` unless it actually ran.
   tool schema and annotations;
 - a disabled tool cannot be called through MCP;
 - unknown and over-budget transitions leave the prior list unchanged;
-- `full` retains all pre-change tool names and stable schema fingerprints;
+- a compact session cannot select `full`; a dynamic session started in `full`
+  retains all pre-change tool names and stable schema fingerprints and reset returns
+  to that startup state;
 - two HTTP sessions can select different toolsets without cross-session leakage;
 - stdio retains one session-local active set.
 
@@ -501,12 +539,14 @@ The implementation is accepted only when all of the following are evidenced:
 
 1. The owner's configured startup surface contains at most 20 tools and 64 KiB of
    metadata.
-2. Each ordinary static preset contains at most 120 tools and 256 KiB.
+2. Each ordinary dynamic preset contains at most 120 tools and 256 KiB.
 3. `build`, `show`, and `library` activate no raw-code or destructive tools.
 4. Static `full` remains exactly the existing 497 tools. Dynamic `full` contains
-   those 497 unchanged tools plus the four management tools. Existing schema
-   fingerprints remain unchanged unless an independently verified pre-existing
-   defect requires a documented fix.
+   those 497 unchanged tools plus the four management tools only as a startup/reset
+   compatibility state and is never selectable from a compact session. Static
+   `directory` remains 15 and dynamic `directory` is the exact protected-core union,
+   22. Existing schema fingerprints remain unchanged unless an independently
+   verified pre-existing defect requires a documented fix.
 5. A failed transition changes zero enabled states.
 6. HTTP session isolation and stdio behavior pass integration tests.
 7. Every golden request finds the expected tool within the top five.
@@ -516,6 +556,9 @@ The implementation is accepted only when all of the following are evidenced:
 11. Live and hardware-dependent checks are reported honestly as PASS, FAIL, or
     UNVERIFIED.
 12. The user's unrelated `pnpm-lock.yaml` remains untouched and uncommitted.
+13. README, English and Portuguese references, Smithery, deployment, MCPB, and
+    registry surfaces agree on profile choices, counts, defaults, refresh fallback,
+    and legacy rollback.
 
 ## Rollout
 
@@ -527,9 +570,14 @@ The implementation is accepted only when all of the following are evidenced:
 4. Add in-memory and HTTP isolation tests, then Inspector and Conformance harnesses.
 5. Run the full offline quality gates and classify live checks.
 6. Update user and developer documentation, including the static fallback path.
-7. After all required offline gates pass, preserve the current Codex MCP entry and
-   add the `core`/dynamic environment settings.
-8. Restart or refresh Codex as required, confirm the live tools list, and retain a
+7. After all required offline gates pass, resolve the exact artifact configured by
+   Codex, require its primary checkout to contain the QA-approved commit, rebuild
+   and hash it, run the compact Inspector probe against that exact artifact, and
+   hash the complete existing per-tool approval blocks.
+8. Only after those checks pass, preserve the current Codex MCP entry and add the
+   `core`/dynamic environment settings; require the approval-block hash to remain
+   byte-identical.
+9. Restart or refresh Codex as required, confirm the live tools list, and retain a
    documented rollback to `full` with dynamic mode off.
 
 ## Rollback
@@ -554,8 +602,10 @@ unrelated user changes.
   implementation code.
 - Do not import GPL/AGPL code into the runtime without a separate license decision.
 - Do not execute third-party setup scripts merely to inspect a repository.
-- Pin test dependencies and review their install scripts and lockfile diff before
-  installation.
+- Pin test dependencies. Resolve lockfile changes with scripts disabled and
+  package-lock-only first; review integrity, bundled licenses, and every new
+  `hasInstallScript` package against the explicit allowlist before any ordinary
+  install. CI must reject a script-bearing lockfile package outside that allowlist.
 
 ## Deferred follow-up waves
 

@@ -13,14 +13,17 @@
 - Keep `@modelcontextprotocol/sdk` on the production v1.x line; do not migrate to the v2 pre-alpha API in this work.
 - Keep package defaults exactly `TDMCP_TOOL_PROFILE=full` and `TDMCP_DYNAMIC_TOOLSETS=off`.
 - Static legacy `full`, `safe`, and `directory` must remain exactly 497, 458, and 15 tools.
-- Dynamic `full`, `safe`, and `directory` must be exactly 501, 462, and 19 tools; dynamic `core` must be exactly 17 tools.
+- Dynamic `full`, `safe`, and `directory` must be exactly 501, 462, and 22 tools; dynamic `core` must be exactly 17 tools. Dynamic `directory` is the exact union of the legacy 15 names and the protected core.
 - Dynamic `core` must serialize to at most 65,536 bytes. Every ordinary dynamic preset must remain at most 120 tools and 262,144 bytes.
 - The protected 17-tool core cannot be removed in dynamic mode.
 - Presets never activate destructive or raw-code tools. A risky tool requires its exact name in `tools`, `include_risky: true`, and all existing environment gates.
+- Dynamic `full` is startup/reset compatibility only. It is absent from the selectable preset schema and can never be selected from a compact session; only initialization/reset to a `full` startup state bypasses ordinary budgets.
 - `TDMCP_RAW_PYTHON=off` remains authoritative even when `include_risky` is true.
-- Do not add a generic invocation proxy, change an existing tool name/schema/annotation/handler, add embeddings, or add a runtime network dependency.
+- Macro nested dispatch is limited to same-session active safe targets. Raw-code and destructive targets are always forbidden, and target input validation must succeed before direct invocation.
+- Do not add a generic invocation proxy, change an existing tool name/schema/annotation/handler except for the bounded macro-dispatch safety fix, add embeddings, or add a runtime network dependency.
 - Preserve the current stdio process-local state and the existing one-`McpServer`-per-HTTP-session isolation.
 - Pin Inspector and Conformance exactly; do not use floating verifier packages in tests or CI.
+- Before installing either verifier, resolve its exact lockfile change with scripts disabled and package-lock-only, review integrity, bundled licenses, and every new `hasInstallScript` package, and pass an allowlist-drift check.
 - Record the exact reviewed upstream commit SHAs and package-declared licenses in provenance documentation.
 - Preserve upstream license notices for copied source. Prefer adapting public patterns through local code over copying implementations.
 - Do not modify, stage, delete, or commit the unrelated untracked `pnpm-lock.yaml`.
@@ -55,6 +58,7 @@
 - `scripts/test-mcp-inspector.mjs` — built-package stdio contract probes using the pinned local CLI.
 - `scripts/test-mcp-conformance.mjs` — temporary loopback HTTP lifecycle, active-suite execution, result summary, and cleanup.
 - `tests/fixtures/tool-contract-baseline.json` — immutable 497-tool name/fingerprint baseline captured before behavior changes.
+- `tests/fixtures/tool-profile-membership.json` — independently reviewed exact sorted membership for the five ordinary profiles.
 - `tests/fixtures/tool-discovery-golden.json` — fixed Korean/English discovery cases.
 - `tests/contract/conformance-expected-failures.yml` — scenario-level fixture mismatch baseline accepted by the upstream runner.
 - `tests/contract/conformance-expected-failures.md` — spec basis, owner, and removal condition for every baseline entry.
@@ -64,6 +68,8 @@
 - `tests/unit/toolCatalog.test.ts` — normalization, ranking, ties, aliases, filtering, and suggestions.
 - `tests/unit/toolsetManager.test.ts` — limits, risk gates, atomicity, rollback, reset, and notification count.
 - `tests/unit/toolsetManagementTools.test.ts` — schemas, structured success/error results, and annotations.
+- `tests/unit/context.test.ts`, `tests/unit/cliAgent.test.ts` — parsed context conversion and exhaustive CLI environment export.
+- `tests/unit/dynamicToolsetDocsParity.test.ts` — profile/count/default/fallback/rollback parity across user-facing surfaces.
 - `tests/unit/result.test.ts` — structured MCP error-result shape.
 - `tests/integration/dynamicToolsets.test.ts` — in-memory MCP list/call/notification/contract behavior.
 - `tests/integration/httpDynamicToolsets.test.ts` — two-session isolation.
@@ -71,13 +77,13 @@
 
 ### Existing files to modify
 
-- `src/utils/config.ts`, `src/cli/configInit.ts`, `src/cli/doctor.ts`, `src/server/context.ts`, `src/tools/types.ts` — validated configuration and context wiring.
+- `src/utils/config.ts`, `src/cli/configInit.ts`, `src/cli/agent.ts`, `src/cli/doctor.ts`, `src/server/context.ts`, `src/tools/types.ts`, `src/tools/layer1/index.ts` — validated configuration, deterministic registrar admission, and context wiring.
 - `src/tools/registry.ts`, `src/tools/index.ts`, `src/tools/util/index.ts`, `src/server/tdmcpServer.ts` — grouped registration and manager ownership.
 - `src/tools/result.ts` — structured `isError` helper.
 - `tests/unit/config.test.ts`, `tests/unit/configInit.test.ts`, `tests/integration/toolProfile.test.ts`, `tests/integration/httpTransport.test.ts` — compatibility regression coverage.
 - `package.json`, `package-lock.json` — scripts and exact dev-only verifier versions.
 - `.github/workflows/ci.yml`, `.github/workflows/code-quality.yml`, `.gitignore` — contract jobs, generated drift, artifact upload, and ignored local results.
-- `scripts/gen-tool-docs.ts`, `README.md`, `docs/reference/environment.md`, `docs/reference/architecture.md`, `mcpb/manifest.json`, `server.json`, `safeskill.manifest.json`, `CHANGELOG.md` — package, registry, and fallback documentation.
+- `scripts/gen-tool-docs.ts`, `README.md`, `docs/reference/environment.md`, `docs/reference/architecture.md`, `docs/pt/reference/environment.md`, `docs/pt/reference/architecture.md`, `docs/DEPLOYMENT.md`, `mcpb/manifest.json`, `server.json`, `smithery.yaml`, `safeskill.manifest.json`, `CHANGELOG.md` — package, registry, bilingual fallback/rollback, deployment, and count documentation.
 - `~/.codex/config.toml` — personal rollout only after all required offline checks pass; preserve all existing per-tool approval entries.
 
 ---
@@ -201,18 +207,21 @@ Expected: `_workspace/` remains ignored; `pnpm-lock.yaml` remains untracked and 
 - Create: `src/tools/toolsets/types.ts`
 - Modify: `src/utils/config.ts`
 - Modify: `src/cli/configInit.ts`
+- Modify: `src/cli/agent.ts`
 - Modify: `src/cli/doctor.ts`
 - Modify: `src/server/context.ts`
 - Modify: `src/tools/types.ts`
 - Modify: `tests/unit/config.test.ts`
 - Modify: `tests/unit/configInit.test.ts`
-- Test: `tests/unit/doctor.test.ts`
+- Modify: `tests/unit/cliAgent.test.ts`
+- Create: `tests/unit/context.test.ts`
+- Modify: `tests/unit/doctor.test.ts`
 
 **Interfaces:**
 - Consumes: existing `ConfigSchema`, `envValues`, `buildToolContext`, and config precedence.
 - Produces: `ToolProfile`, `dynamicToolsets`, `toolMaxActive`, `toolMetadataBudgetKb`, and context byte-budget fields used by Tasks 4–7.
 
-- [ ] **Step 1: Write failing configuration tests**
+- [ ] **Step 1: Write failing configuration, CLI export, context, and doctor tests**
 
 Add these cases to `tests/unit/config.test.ts`:
 
@@ -254,15 +263,30 @@ expect(body).toContain('TDMCP_TOOL_MAX_ACTIVE="120"');
 expect(body).toContain('TDMCP_TOOL_METADATA_BUDGET_KB="256"');
 ```
 
+Add RED assertions before implementation that:
+
+- the exhaustive `Record<keyof TdmcpConfig, string>` CLI map exports the exact
+  names `TDMCP_DYNAMIC_TOOLSETS`, `TDMCP_TOOL_MAX_ACTIVE`, and
+  `TDMCP_TOOL_METADATA_BUDGET_KB`; `config --write-env` emits `off`, `120`, and
+  `256`, while all existing secret redaction remains unchanged;
+- `buildToolContext` converts dynamic `on` to `true`, preserves the configured
+  integer limit, and converts `192` KiB to exactly `196608` bytes;
+- table-driven doctor human text and JSON data cover all eight profiles with both
+  dynamic `on` and `off`, report startup profile/mode/limits/management-tool
+  expectation, use “full surface” only for `full`, give an actionable compact
+  `core`+dynamic-on example, and give the static `build`+dynamic-off restart
+  fallback. Client UI refresh is not a doctor pass/fail probe.
+
 - [ ] **Step 2: Run focused tests and verify the red state**
 
 Run:
 
 ```bash
-rtk test node scripts/run-vitest.mjs run tests/unit/config.test.ts tests/unit/configInit.test.ts
+rtk test node scripts/run-vitest.mjs run tests/unit/config.test.ts tests/unit/configInit.test.ts tests/unit/cliAgent.test.ts tests/unit/context.test.ts tests/unit/doctor.test.ts
 ```
 
-Expected: FAIL because the new profile values and three config properties are not recognized.
+Expected: FAIL because the new profile values/properties, exhaustive export entries,
+context conversions, and doctor classifications are not implemented.
 
 - [ ] **Step 3: Extend `ConfigSchema` and environment mapping**
 
@@ -296,7 +320,8 @@ Create `src/tools/toolsets/types.ts`:
 ```ts
 export type ToolGroup = "layer1" | "layer2" | "layer3" | "foundation" | "library" | "vault" | "ai" | "cli" | "util";
 export type ToolsetPreset = "core" | "inspect" | "build" | "show" | "library";
-export type SelectableToolsetPreset = ToolsetPreset | "safe" | "directory" | "full";
+export type SelectableToolsetPreset = ToolsetPreset | "safe" | "directory";
+export type ToolProfileState = ToolProfile | "custom";
 export type ToolRisk = "read_only" | "safe_mutation" | "destructive" | "raw_code";
 
 export interface DiscoverToolsInput {
@@ -310,7 +335,7 @@ export interface DiscoverToolCandidate {
   risk: ToolRisk; score: number; reason: string;
 }
 export interface DiscoverToolsOutput {
-  query: string; normalized_query: string; candidates: DiscoverToolCandidate[];
+  ok: true; query: string; normalized_query: string; candidates: DiscoverToolCandidate[];
 }
 export interface SelectToolsetInput {
   preset?: SelectableToolsetPreset;
@@ -319,12 +344,12 @@ export interface SelectToolsetInput {
   include_risky?: boolean;
 }
 export interface ToolsetTransitionOutput {
-  previous_profile: string; current_profile: string; active_count: number;
+  ok: true; previous_profile: ToolProfileState; current_profile: ToolProfileState; active_count: number;
   metadata_bytes: number; added: string[]; removed: string[]; warnings: string[];
   client_refresh_required: true;
 }
 export interface ActiveToolsetOutput {
-  startup_profile: string; current_profile: string; active_tools: string[];
+  ok: true; startup_profile: ToolProfile; current_profile: ToolProfileState; active_tools: string[];
   active_count: number; metadata_bytes: number; max_active: number;
   metadata_budget_bytes: number; dynamic_toolsets: boolean; protected_core: string[];
 }
@@ -362,22 +387,27 @@ In `src/cli/configInit.ts`, render:
 ```ts
 '# Dynamic session-local discovery/activation tools. on|off.',
 'TDMCP_DYNAMIC_TOOLSETS="off"',
-'# Maximum active tools in dynamic mode; explicit full bypasses this count limit.',
+'# Maximum active tools in dynamic mode; only startup/reset full compatibility bypasses this limit.',
 'TDMCP_TOOL_MAX_ACTIVE="120"',
 '# Serialized tools/list budget in KiB for dynamic selections.',
 'TDMCP_TOOL_METADATA_BUDGET_KB="256"',
 ```
 
-Update the profile comment to list all eight values. In `src/cli/doctor.ts`, include `dynamicToolsets`, `toolMaxActive`, and `toolMetadataBudgetKb` in the existing tool-exposure diagnostic data and describe dynamic `off` as the compatibility default.
+Update the profile comment to list all eight values. Keep the exhaustive
+`ENV_NAMES: Record<keyof TdmcpConfig, string>` in `src/cli/agent.ts` and add the
+three exact exports. In `src/cli/doctor.ts`, implement the complete RED matrix from
+Step 1, including `dynamicToolsets`, `toolMaxActive`, and
+`toolMetadataBudgetKb` in diagnostic data and dynamic `off` as the compatibility
+default.
 
 - [ ] **Step 6: Run focused tests and static checks**
 
 Run:
 
 ```bash
-rtk test node scripts/run-vitest.mjs run tests/unit/config.test.ts tests/unit/configInit.test.ts tests/unit/doctor.test.ts
+rtk test node scripts/run-vitest.mjs run tests/unit/config.test.ts tests/unit/configInit.test.ts tests/unit/cliAgent.test.ts tests/unit/context.test.ts tests/unit/doctor.test.ts
 rtk npm run typecheck
-rtk proxy ./node_modules/.bin/biome check src/utils/config.ts src/cli/configInit.ts src/cli/doctor.ts src/server/context.ts src/tools/types.ts src/tools/toolsets/types.ts tests/unit/config.test.ts tests/unit/configInit.test.ts tests/unit/doctor.test.ts
+rtk proxy ./node_modules/.bin/biome check src/utils/config.ts src/cli/configInit.ts src/cli/agent.ts src/cli/doctor.ts src/server/context.ts src/tools/types.ts src/tools/toolsets/types.ts tests/unit/config.test.ts tests/unit/configInit.test.ts tests/unit/cliAgent.test.ts tests/unit/context.test.ts tests/unit/doctor.test.ts
 ```
 
 Expected: all focused tests pass; TypeScript and Biome report no errors.
@@ -387,7 +417,7 @@ Expected: all focused tests pass; TypeScript and Biome report no errors.
 Run:
 
 ```bash
-rtk git add src/utils/config.ts src/cli/configInit.ts src/cli/doctor.ts src/server/context.ts src/tools/types.ts src/tools/toolsets/types.ts tests/unit/config.test.ts tests/unit/configInit.test.ts tests/unit/doctor.test.ts
+rtk git add src/utils/config.ts src/cli/configInit.ts src/cli/agent.ts src/cli/doctor.ts src/server/context.ts src/tools/types.ts src/tools/toolsets/types.ts tests/unit/config.test.ts tests/unit/configInit.test.ts tests/unit/cliAgent.test.ts tests/unit/context.test.ts tests/unit/doctor.test.ts
 rtk git commit -m "feat: configure dynamic toolset limits"
 ```
 
@@ -404,6 +434,9 @@ Expected: the commit excludes `pnpm-lock.yaml`.
 - Create: `tests/fixtures/tool-contract-baseline.json`
 - Create: `tests/unit/toolMetadata.test.ts`
 - Modify: `src/tools/toolsets/types.ts`
+- Modify: `src/tools/layer1/index.ts`
+- Modify: `src/server/context.ts`
+- Modify: `src/tools/types.ts`
 - Modify: `package.json`
 - Modify: `.github/workflows/code-quality.yml`
 
@@ -444,6 +477,12 @@ describe("tool metadata", () => {
   });
 });
 ```
+
+Also add RED tests that construct assembled servers in the same process with
+`TDMCP_RAG_APPLY_CARD` off then on, and on then off. Each order must differ by
+exactly `apply_creative_card` with no state leakage. Run the generator with a
+sentinel unrelated secret key/value and assert that neither generated output nor
+captured logger output contains the key or value.
 
 - [ ] **Step 2: Run the test and verify the red state**
 
@@ -526,19 +565,28 @@ export const TOOL_METADATA = {} satisfies Record<string, GeneratedToolMetadataEn
 Create `scripts/gen-tool-metadata.ts` with these concrete operations:
 
 ```ts
-async function collectFullTools(env: NodeJS.ProcessEnv): Promise<Tool[]> {
+async function collectFullTools(overrides: NodeJS.ProcessEnv): Promise<Tool[]> {
+  const env = explicitGeneratorEnv(overrides); // allowlisted keys only; never spread process.env
   const config = loadConfig(env);
   const server = createTdmcpServer(config, { logger: silentLogger });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "tdmcp-metadata-generator", version: "0.0.0" });
   try {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    return (await client.listTools()).tools.sort((a, b) => a.name.localeCompare(b.name));
+    return (await client.listTools()).tools.sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+    );
   } finally {
     await Promise.allSettled([client.close(), server.close()]);
   }
 }
 ```
+
+Remove the module-import mutation in `src/tools/layer1/index.ts`. Keep the RAG
+registrar deterministically present in the group and admit it through parsed
+`ctx.ragApplyCard`; add that boolean to `ToolContext` and map it from
+`config.ragApplyCard` in `buildToolContext`. No registration decision may read the
+generator process's global environment.
 
 Render each tool as:
 
@@ -637,7 +685,7 @@ Run:
 rtk test node scripts/run-vitest.mjs run tests/unit/toolMetadata.test.ts
 rtk npm run tools:metadata:check
 rtk npm run typecheck
-rtk proxy ./node_modules/.bin/biome check scripts/gen-tool-metadata.ts src/tools/toolsets/metadata.ts src/tools/toolsets/types.ts src/tools/toolsets/toolMetadata.generated.ts tests/unit/toolMetadata.test.ts
+rtk proxy ./node_modules/.bin/biome check scripts/gen-tool-metadata.ts src/tools/toolsets/metadata.ts src/tools/toolsets/types.ts src/tools/toolsets/toolMetadata.generated.ts src/tools/layer1/index.ts src/server/context.ts src/tools/types.ts tests/unit/toolMetadata.test.ts
 rtk git diff --check
 ```
 
@@ -648,7 +696,7 @@ Expected: all commands pass with no whitespace errors.
 Run:
 
 ```bash
-rtk git add package.json scripts/gen-tool-metadata.ts src/tools/toolsets/metadata.ts src/tools/toolsets/types.ts src/tools/toolsets/toolMetadata.generated.ts tests/fixtures/tool-contract-baseline.json tests/unit/toolMetadata.test.ts .github/workflows/code-quality.yml
+rtk git add package.json scripts/gen-tool-metadata.ts src/tools/toolsets/metadata.ts src/tools/toolsets/types.ts src/tools/toolsets/toolMetadata.generated.ts src/tools/layer1/index.ts src/server/context.ts src/tools/types.ts tests/fixtures/tool-contract-baseline.json tests/unit/toolMetadata.test.ts .github/workflows/code-quality.yml
 rtk git commit -m "test: lock MCP tool metadata baseline"
 ```
 
@@ -666,6 +714,7 @@ Expected: the commit contains 497 baseline fingerprints and excludes `pnpm-lock.
 - Modify: `src/tools/index.ts`
 - Modify: `src/server/tdmcpServer.ts`
 - Modify: `src/tools/cli/runMacroScript.ts`
+- Modify: `tests/unit/runMacroScript.test.ts`
 - Modify: `tests/smoke/execOff.test.ts`
 - Modify: `tests/integration/toolProfile.test.ts`
 
@@ -686,6 +735,16 @@ expect(server.registerTool).toBe(originalRegisterAfterCompletion);
 ```
 
 Add a throwing registrar case and assert restoration in `finally`. Add static-filter cases asserting excluded tools never reach the real registrar.
+
+Before the registration refactor, add macro regression tests that prove:
+
+- a safe target outside dynamic core is captured for later use but is not invoked
+  until it is active in the same session;
+- the same active safe target runs only after its captured input contract validates,
+  and invalid input returns a stable skip/error with no handler call or state change;
+- `delete_td_node` and every other destructive target are rejected even when active;
+- `execute_python_script` and every other raw-code target are rejected even when
+  active and regardless of macro arguments or the raw-Python environment gate.
 
 - [ ] **Step 2: Run focused tests and verify the red state**
 
@@ -819,6 +878,13 @@ registerToolGroups(stub, ctx, {
 
 Keep the existing `WeakMap` cache and test injection. Do not call the outer macro recorder wrapper while constructing this private dispatch map.
 
+Capture each nested target's input contract, annotations, raw-code classification,
+and session-active predicate alongside its handler. Before every direct invocation,
+require the target to be active, reject raw-code and `destructiveHint: true` targets
+unconditionally, validate the entry arguments through the captured Zod contract,
+and pass only parsed arguments to the safe handler. These checks apply in static and
+dynamic sessions; macro arguments can never opt around them.
+
 - [ ] **Step 7: Remove the server-level macro monkey patch**
 
 In `src/server/tdmcpServer.ts`, replace the old wrapper with:
@@ -838,7 +904,7 @@ Resources and prompts remain registered after tools and never enter the filter.
 Run:
 
 ```bash
-rtk test node scripts/run-vitest.mjs run tests/unit/toolRegistration.test.ts tests/integration/toolProfile.test.ts tests/smoke/execOff.test.ts tests/unit/macroRecorder.test.ts
+rtk test node scripts/run-vitest.mjs run tests/unit/toolRegistration.test.ts tests/unit/runMacroScript.test.ts tests/integration/toolProfile.test.ts tests/smoke/execOff.test.ts tests/unit/macroRecorder.test.ts
 rtk npm run tools:metadata:check
 rtk npm run typecheck
 rtk npm run deps:check
@@ -860,7 +926,7 @@ If an original fingerprint changes, fix the pipeline; do not regenerate the lock
 Run:
 
 ```bash
-rtk git add src/tools/registration.ts src/tools/toolsets/profiles.ts src/tools/toolsets/types.ts src/tools/registry.ts src/tools/index.ts src/server/tdmcpServer.ts src/tools/cli/runMacroScript.ts tests/unit/toolRegistration.test.ts tests/smoke/execOff.test.ts tests/integration/toolProfile.test.ts
+rtk git add src/tools/registration.ts src/tools/toolsets/profiles.ts src/tools/toolsets/types.ts src/tools/registry.ts src/tools/index.ts src/server/tdmcpServer.ts src/tools/cli/runMacroScript.ts tests/unit/toolRegistration.test.ts tests/unit/runMacroScript.test.ts tests/smoke/execOff.test.ts tests/integration/toolProfile.test.ts
 rtk git commit -m "refactor: consolidate MCP tool registration"
 ```
 
@@ -875,6 +941,7 @@ Expected: original metadata remains identical.
 - Create: `src/tools/toolsets/catalog.ts`
 - Create: `tests/unit/toolProfiles.test.ts`
 - Create: `tests/unit/toolCatalog.test.ts`
+- Create: `tests/fixtures/tool-profile-membership.json`
 - Modify: `src/tools/toolsets/profiles.ts`
 - Modify: `src/tools/toolsets/types.ts`
 
@@ -895,6 +962,12 @@ expect(BUILD_PROFILE_TOOL_NAMES.length).toBeLessThanOrEqual(116);
 ```
 
 For each of `core`, `inspect`, `build`, `show`, and `library`, assert the static membership has at most 116 names and at most 262,144 serialized bytes, then union the four management names and assert the dynamic membership has at most 120 names. Task 8 checks dynamic bytes after the management entries exist in generated metadata. Every explicit name must exist in `TOOL_METADATA` or the four management names. `build`, `show`, and `library` must not intersect `SAFE_PROFILE_EXCLUDE` or `RAW_CODE_TOOL_NAMES`.
+
+Create an independently reviewed fixture with the exact sorted names for `core`,
+`inspect`, `build`, `show`, and `library`; do not generate it from production tuples.
+Compare every assembled membership to this fixture. From captured assembled
+annotations, assert every static `inspect` member has `readOnlyHint: true` and every
+ordinary preset has no raw-code or destructive member.
 
 In `toolCatalog.test.ts`, assert:
 
@@ -1104,7 +1177,7 @@ Expected: memberships contain only real tools, risk intersections are empty, and
 Run:
 
 ```bash
-rtk git add src/tools/toolsets/profiles.ts src/tools/toolsets/overrides.ts src/tools/toolsets/catalog.ts src/tools/toolsets/types.ts tests/unit/toolProfiles.test.ts tests/unit/toolCatalog.test.ts
+rtk git add src/tools/toolsets/profiles.ts src/tools/toolsets/overrides.ts src/tools/toolsets/catalog.ts src/tools/toolsets/types.ts tests/fixtures/tool-profile-membership.json tests/unit/toolProfiles.test.ts tests/unit/toolCatalog.test.ts
 rtk git commit -m "feat: add curated MCP tool catalog"
 ```
 
@@ -1135,11 +1208,18 @@ Use fake handles whose `enable`, `disable`, and `update` mutate `enabled`, plus 
 - `requires explicit tools plus include_risky for destructive/raw code`: try a risky preset-only selection, then an explicit name without the flag, and assert both reject before lifecycle calls.
 - `keeps raw code blocked when raw Python is off`: request `execute_python_script` explicitly with `include_risky: true`, assert `raw_python_disabled`, including when raw tools were intentionally not captured by registration.
 - `rejects count and byte budgets with largest contributors`: inject small test budgets, assert `active_tool_limit_exceeded` and `metadata_budget_exceeded` in separate cases, sorted largest contributors, and an unchanged enabled snapshot.
-- `lets only explicit full bypass ordinary budgets`: assert `{ preset: "full" }` succeeds above the ordinary budget while an equivalent explicit tool list fails.
-- `applies replace and add modes`: replace optional membership, add another optional tool, and assert the exact sorted active names after both transitions.
+- `keeps full startup/reset compatibility out of selection`: initialize a
+  dynamic/full session above ordinary budgets, select a compact preset, and assert
+  reset returns to full; from a compact startup, an attempted `full` selection is
+  invalid with zero handle changes and zero notifications.
+- `applies replace and add modes`: replace optional membership, add another optional tool, assert the exact sorted active names, preset replacement state, and `custom` after explicit replacement and every add.
 - `rolls back every handle when one lifecycle update throws`: make the middle fake throw, assert all handles return to their snapshot and no notification is emitted.
 - `emits exactly one list-change notification`: transition across several enable/disable operations and assert the public notifier is called once after success.
-- `serializes overlapping transitions`: block the first fake update with a deferred promise, start a second selection, release the first, and assert non-interleaved final state and two ordered results.
+- `serializes synchronous transitions in call-arrival order`: call two selections
+  without awaiting the first, record synchronous lifecycle operations, await both,
+  and assert every first-transition operation/result precedes the second and the
+  final state is the second target. Do not add asynchronous lifecycle machinery or
+  a deferred fake handle.
 - `resets exactly to the startup profile`: initialize a non-default startup profile, mutate it, reset it, and assert exact startup membership rather than hard-coded core membership.
 
 Each failure test snapshots all `enabled` values before the call and compares them after rejection.
@@ -1174,7 +1254,7 @@ export class ToolsetError extends Error {
   constructor(
     readonly code: ToolsetErrorCode,
     message: string,
-    readonly details: Record<string, unknown> = {},
+    readonly details: ToolsetErrorDetails = {},
   ) {
     super(message);
     this.name = "ToolsetError";
@@ -1182,7 +1262,14 @@ export class ToolsetError extends Error {
 }
 ```
 
-Messages may name tools, counts, and public limits only; never include environment values, complete schemas, handler text, paths, or credentials.
+Define `ToolsetErrorDetails` as a code-specific discriminated union and serialize it
+through an allowlist. The only permitted values are public tool names, counts,
+limits, close matches, suggested presets, and metadata contributors. Messages and
+details may never include environment values, complete schemas, handler text,
+paths, credentials, arbitrary causes, stacks, or thrown objects. Unit tests inject
+sentinel token/path/schema/handler strings into both a `ToolsetError` and an
+unexpected thrown error, capture structured results and logger output, and assert
+that none of the sentinels appears.
 
 - [ ] **Step 4: Implement capture and initialization**
 
@@ -1214,7 +1301,7 @@ export class ToolsetManager implements ToolsetController {
 Enforce this order:
 
 ```text
-validate exactly one of preset/tools
+validate exactly one of preset/tools; selectable presets exclude full
 validate include_risky only with explicit tools
 resolve preset or exact names
 union the protected core
@@ -1223,7 +1310,7 @@ reject every other unknown name and attach five suggestions
 require exact explicit risky names plus include_risky
 apply the raw-Python gate
 calculate count and exact serialized bytes
-reject ordinary count/byte overflow; explicit full alone bypasses
+reject ordinary count/byte overflow; only initialize/reset to a full startup bypasses
 compute complete before/after enabled-state maps
 ```
 
@@ -1258,7 +1345,11 @@ try {
 originalNotify();
 ```
 
-Guard the block with a promise tail so overlapping `select`/`reset` calls execute in arrival order. Update `currentProfile` only after success. Sort every name array.
+Guard the block with a promise tail so `select`/`reset` calls execute in arrival
+order even though SDK lifecycle methods are synchronous. Update `currentProfile`
+only after success: preset replacement reports that preset, explicit replacement
+and every add report `custom`, and reset reports the startup profile. Sort every
+name array.
 
 - [ ] **Step 7: Run manager and compatibility checks**
 
@@ -1309,7 +1400,13 @@ Expected: no MCP management tool is visible yet.
 
 - [ ] **Step 1: Write failing result-helper and management-tool tests**
 
-In `tests/unit/toolsetManagementTools.test.ts`, use a fake controller and capturing server. Assert all four names register with an `outputSchema`, all have `destructiveHint: false`, and read-only hints are true only for discovery/state inspection.
+In `tests/unit/toolsetManagementTools.test.ts`, use a fake controller and capturing
+server. Assert all four names register with a discriminated success/error
+`outputSchema`, all have `destructiveHint: false`, and read-only hints are true only
+for discovery/state inspection. Assert non-empty descriptions explain exactly-one
+selection, explicit risky opt-in, refresh uncertainty, and the static restart
+fallback. Parse every success and stable error code against the advertised result
+schema, because the SDK skips output validation for `isError` results.
 
 Add an error assertion:
 
@@ -1328,7 +1425,7 @@ Add a `structuredErrorResult` unit case to `tests/unit/result.test.ts`:
 expect(structuredErrorResult("failed", { code: "x" })).toEqual({
   isError: true,
   content: [{ type: "text", text: "failed" }],
-  structuredContent: { code: "x" },
+  structuredContent: { ok: false, code: "x" },
 });
 ```
 
@@ -1347,26 +1444,28 @@ Expected: FAIL because the helper and four files do not exist.
 In `src/tools/result.ts`:
 
 ```ts
-export function structuredErrorResult(summary: string, data: object): CallToolResult {
+export function structuredErrorResult(summary: string, data: SafeStructuredError): CallToolResult {
   return {
     isError: true,
     content: [{ type: "text", text: summary }],
-    structuredContent: data as { [key: string]: unknown },
+    structuredContent: { ok: false, ...data },
   };
 }
 ```
 
-Management implementations catch only `ToolsetError` and return:
+Management implementations catch `ToolsetError`, serialize only its code-specific
+allowlisted details, and return:
 
 ```ts
 return structuredErrorResult(error.message, {
-  ok: false,
   code: error.code,
-  ...error.details,
+  ...serializeToolsetErrorDetails(error),
 });
 ```
 
-Unexpected errors are logged without arguments and return code `toolset_transition_failed` with no stack or path.
+Unexpected errors are logged as a fixed public code without the thrown object or
+arguments and return code `toolset_transition_failed` with no stack or path.
+Sentinel tests cover both branches and logger output.
 
 - [ ] **Step 4: Implement `discover_tools`**
 
@@ -1380,6 +1479,7 @@ export const discoverToolsSchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(10),
 });
 export const discoverToolsOutputSchema = z.object({
+  ok: z.literal(true),
   query: z.string(),
   normalized_query: z.string(),
   candidates: z.array(z.object({
@@ -1392,7 +1492,10 @@ export const discoverToolsOutputSchema = z.object({
 });
 ```
 
-The registrar uses `inputSchema: discoverToolsSchema.shape`, `outputSchema: discoverToolsOutputSchema.shape`, `readOnlyHint: true`, `destructiveHint: false`, and `openWorldHint: false`. The implementation returns `structuredResult` with no full schemas.
+Advertise a discriminated union of this success shape and the code-specific
+`toolsetErrorOutputSchema`. The registrar uses the union as `outputSchema`,
+`readOnlyHint: true`, `destructiveHint: false`, and `openWorldHint: false`. The
+implementation returns `structuredResult` with no full schemas.
 
 - [ ] **Step 5: Implement `select_toolset`**
 
@@ -1400,26 +1503,36 @@ In `src/tools/util/selectToolset.ts`, define:
 
 ```ts
 export const selectToolsetSchema = z.object({
-  preset: z.enum(["core", "inspect", "build", "show", "library", "safe", "directory", "full"]).optional(),
+  preset: z.enum(["core", "inspect", "build", "show", "library", "safe", "directory"]).optional(),
   tools: z.array(z.string().trim().min(1)).min(1).max(120).optional(),
   mode: z.enum(["replace", "add"]).default("replace"),
   include_risky: z.boolean().default(false),
 });
 export const toolsetTransitionOutputSchema = z.object({
-  previous_profile: z.string(), current_profile: z.string(),
+  ok: z.literal(true),
+  previous_profile: toolProfileStateSchema, current_profile: toolProfileStateSchema,
   active_count: z.number().int().nonnegative(), metadata_bytes: z.number().int().nonnegative(),
   added: z.array(z.string()), removed: z.array(z.string()), warnings: z.array(z.string()),
   client_refresh_required: z.literal(true),
 });
 ```
 
-The manager enforces the cross-field selection rules. Register with `readOnlyHint: false`, `destructiveHint: false`, `openWorldHint: false` and return a concise summary plus the exact structured transition.
+The manager enforces the cross-field selection rules. `toolProfileStateSchema` is
+the eight configured profiles plus `custom`. Register with `readOnlyHint: false`,
+`destructiveHint: false`, `openWorldHint: false`, advertise the discriminated
+success/error union, and return a concise summary plus the exact structured
+transition. Assert through `tools/list` that the preset enum omits `full`.
 
 - [ ] **Step 6: Implement state inspection and reset**
 
 `getActiveToolset.ts` uses an empty Zod object input and an output schema matching every field in `ActiveToolsetOutput`. It is read-only.
 
 `resetToolset.ts` uses an empty Zod object input and reuses `toolsetTransitionOutputSchema`. It is a non-destructive mutation. Both call `ctx.toolsets`; if absent, return `dynamic_toolsets_disabled` through `structuredErrorResult`.
+
+Both registrars advertise the same discriminated success/code-specific-error union
+used by discovery and selection. In-memory MCP tests explicitly parse success and
+every stable error for all four tools, including `custom` after explicit/add and the
+startup profile after reset.
 
 Update `src/tools/util/index.ts`:
 
@@ -1501,12 +1614,14 @@ const EXPECTED_COUNTS = [
   [{ TDMCP_TOOL_PROFILE: "core" }, 13],
   [{ TDMCP_TOOL_PROFILE: "full", TDMCP_DYNAMIC_TOOLSETS: "on" }, 501],
   [{ TDMCP_TOOL_PROFILE: "safe", TDMCP_DYNAMIC_TOOLSETS: "on" }, 462],
-  [{ TDMCP_TOOL_PROFILE: "directory", TDMCP_DYNAMIC_TOOLSETS: "on" }, 19],
+  [{ TDMCP_TOOL_PROFILE: "directory", TDMCP_DYNAMIC_TOOLSETS: "on" }, 22],
   [{ TDMCP_TOOL_PROFILE: "core", TDMCP_DYNAMIC_TOOLSETS: "on" }, 17],
 ] as const;
 ```
 
 Assert the four management names are absent in every static mode and present in every dynamic mode.
+For dynamic `directory`, independently assert the exact sorted union of the legacy
+directory fixture and `PROTECTED_CORE_TOOL_NAMES`, not only the count.
 
 - [ ] **Step 10: Run the focused integration slice**
 
@@ -1606,9 +1721,19 @@ On initial core, call `create_audio_reactive` and assert an MCP error result con
 
 - [ ] **Step 5: Verify every preset budget and risk invariant through MCP**
 
-For `core`, `inspect`, `build`, `show`, and `library`, select the preset, relist, and assert count <=120 and serialized bytes <=262,144. For `build`, `show`, and `library`, assert every returned tool has `destructiveHint !== true` and none is a raw-code name.
+For `core`, `inspect`, `build`, `show`, and `library`, select the preset,
+relist, and assert count <=120 and serialized bytes <=262,144. For every ordinary
+preset, assert no returned tool is destructive or raw code; independently assert
+all static `inspect` entries are read-only. Select dynamic `directory` and compare
+its exact 22 names to the legacy-directory/protected-core union.
 
-Select `full` and assert the 497 baseline names plus four management names. With `TDMCP_RAW_PYTHON=off`, explicitly select `execute_python_script` with `include_risky: true` and assert `raw_python_disabled` with no list change.
+Attempt `{ preset: "full" }` from the compact session and assert input rejection,
+zero handle changes, and zero list-change notifications. Open a separate dynamic
+session whose startup profile is `full`, assert the 497 baseline names plus four
+management names, select a compact preset, reset, and assert the exact 501-name
+startup state returns despite ordinary budgets. With `TDMCP_RAW_PYTHON=off`,
+explicitly select `execute_python_script` with `include_risky: true` and assert
+`raw_python_disabled` with no list change.
 
 - [ ] **Step 6: Run the protocol integration suite**
 
@@ -1781,6 +1906,7 @@ rtk git commit -m "test: add bilingual tool discovery eval"
 
 **Files:**
 - Create: `scripts/test-mcp-inspector.mjs`
+- Create: `scripts/check-install-script-allowlist.mjs`
 - Modify: `package.json`
 - Modify: `package-lock.json`
 - Modify: `.github/workflows/ci.yml`
@@ -1789,15 +1915,29 @@ rtk git commit -m "test: add bilingual tool discovery eval"
 - Consumes: built `dist/index.js`, local `mcp-inspector-cli`, core/dynamic environment, and independent stdio processes.
 - Produces: reproducible initialize/list/call/resources/prompts contract evidence without downloading packages during CI.
 
-- [ ] **Step 1: Install the exact CLI-only verifier dependency**
+- [ ] **Step 1: Resolve and audit the exact CLI-only verifier before installation**
 
-After reviewing the package and lockfile diff, run:
+First resolve metadata without executing lifecycle scripts:
 
 ```bash
-rtk proxy npm install --save-dev --save-exact @modelcontextprotocol/inspector-cli@0.22.0
+rtk proxy npm install --save-dev --save-exact --ignore-scripts --package-lock-only @modelcontextprotocol/inspector-cli@0.22.0
+rtk git diff -- package.json package-lock.json
+rtk proxy jq -r '.packages | to_entries[] | select(.value.hasInstallScript == true) | [.key, (.value.version // ""), (.value.integrity // "")] | @tsv' package-lock.json
+rtk proxy npm view @modelcontextprotocol/inspector-cli@0.22.0 version license dist.integrity --json
 ```
 
-Expected: `package.json` records exactly `0.22.0`; only `package-lock.json` changes with it. Do not create or update `pnpm-lock.yaml`.
+Inspect the exact package tarball with `npm pack --json` without running it and
+record the bundled `package.json`, `LICENSE*`/`NOTICE*`, integrity, and any script.
+Implement `check-install-script-allowlist.mjs` to derive package names for every
+lockfile entry with `hasInstallScript: true` and fail unless each is present and
+enabled in `package.json#allowScripts`. Add
+`"deps:install-scripts:check": "node scripts/check-install-script-allowlist.mjs"`,
+run it before any ordinary install, and update `allowScripts` only for a newly
+reviewed package with recorded justification. Once integrity, license, lock diff,
+and script-bearing packages pass review, run the exact install normally.
+
+Expected: `package.json` records exactly `0.22.0`; only the intended package and
+lockfile/policy changes occur. Do not create or update `pnpm-lock.yaml`.
 
 - [ ] **Step 2: Implement a strict subprocess harness**
 
@@ -1805,7 +1945,7 @@ Create `scripts/test-mcp-inspector.mjs` using `spawn` with a 30-second timeout p
 
 ```js
 const inspector = resolve("node_modules/.bin/mcp-inspector-cli");
-const server = resolve("dist/index.js");
+const server = resolve(process.env.TDMCP_INSPECTOR_SERVER ?? "dist/index.js");
 const env = {
   ...process.env,
   TDMCP_TOOL_PROFILE: "core",
@@ -1877,6 +2017,10 @@ In `.github/workflows/ci.yml`, add `mcp-inspector-contract` using Node 22.x:
 ```
 
 Add the job to `ci-success.needs`, environment result mapping, and required result loop.
+Add a required no-install CI job that runs
+`node scripts/check-install-script-allowlist.mjs` immediately after checkout and
+before any `npm ci`; this makes lockfile/allowlist drift fail before lifecycle
+scripts execute.
 
 - [ ] **Step 5: Run lint and commit the Inspector harness**
 
@@ -1886,7 +2030,8 @@ Run:
 rtk proxy ./node_modules/.bin/biome check scripts/test-mcp-inspector.mjs
 rtk npm run test:mcp:inspector
 rtk git diff --check
-rtk git add package.json package-lock.json scripts/test-mcp-inspector.mjs .github/workflows/ci.yml
+rtk npm run deps:install-scripts:check
+rtk git add package.json package-lock.json scripts/test-mcp-inspector.mjs scripts/check-install-script-allowlist.mjs .github/workflows/ci.yml
 rtk git commit -m "test: add pinned MCP Inspector contracts"
 ```
 
@@ -1909,15 +2054,23 @@ Expected: exact dependency version and no floating network execution in the harn
 - Consumes: built stateful HTTP server, pinned Conformance CLI, protocol version 2025-11-25, and loopback host protection.
 - Produces: machine-readable active-suite results, explicit fixture-only expected failures, CI artifacts, and a zero-unexplained-failure gate.
 
-- [ ] **Step 1: Install the exact Conformance dependency**
+- [ ] **Step 1: Resolve and audit the exact Conformance dependency before installation**
 
-Run after package review:
+Repeat the scripts-disabled preflight from Task 11 for this exact package:
 
 ```bash
-rtk proxy npm install --save-dev --save-exact @modelcontextprotocol/conformance@0.2.0-alpha.9
+rtk proxy npm install --save-dev --save-exact --ignore-scripts --package-lock-only @modelcontextprotocol/conformance@0.2.0-alpha.9
+rtk git diff -- package.json package-lock.json
+rtk proxy jq -r '.packages | to_entries[] | select(.value.hasInstallScript == true) | [.key, (.value.version // ""), (.value.integrity // "")] | @tsv' package-lock.json
+rtk proxy npm view @modelcontextprotocol/conformance@0.2.0-alpha.9 version license dist.integrity --json
+rtk npm run deps:install-scripts:check
 ```
 
-Expected: exact version in `package.json`; only `package-lock.json` changes. Do not run any upstream setup script manually.
+Inspect the exact `npm pack --json` tarball's bundled license/notice, package
+scripts, and integrity. Ordinary install is forbidden until the lock diff, every
+new `hasInstallScript`, the explicit allowlist, and license evidence pass. Expected:
+exact version in `package.json`; only intended package/lock/policy changes. Do not
+run any upstream setup script manually.
 
 - [ ] **Step 2: Create the initial fixture-mismatch baseline**
 
@@ -2044,11 +2197,17 @@ Expected: artifact output stays ignored and no server child remains running.
 - Modify: `README.md`
 - Modify: `docs/reference/environment.md`
 - Modify: `docs/reference/architecture.md`
+- Modify: `docs/pt/reference/environment.md`
+- Modify: `docs/pt/reference/architecture.md`
+- Modify: `docs/DEPLOYMENT.md`
 - Modify: `scripts/gen-tool-docs.ts`
 - Modify: `mcpb/manifest.json`
 - Modify: `server.json`
+- Modify: `smithery.yaml`
 - Modify: `safeskill.manifest.json`
 - Modify: `CHANGELOG.md`
+- Create: `tests/unit/dynamicToolsetDocsParity.test.ts`
+- Modify: `tests/unit/mcpbManifest.test.ts`
 
 **Interfaces:**
 - Consumes: final configuration, profile membership, management schemas, verifier commands, and approved provenance policy.
@@ -2075,6 +2234,16 @@ TDMCP_DYNAMIC_TOOLSETS = "off"
 
 State that `client_refresh_required: true` is a hint, not acknowledgement.
 
+Update both Portuguese reference pages with the same defaults, eight profiles,
+discovery flow, refresh caveat, counts, fallback, and rollback semantics. Keep two
+distinct recipes in README and both language variants:
+
+- client does not refresh: chosen static profile such as `build` + dynamic `off` +
+  restart;
+- restore legacy behavior: `full` + dynamic `off` + restart.
+
+State that neither recipe deletes code nor changes per-tool approvals.
+
 - [ ] **Step 2: Update README and generated tool docs**
 
 README must show package-compatible defaults and the personal compact example:
@@ -2087,6 +2256,10 @@ TDMCP_DYNAMIC_TOOLSETS = "on"
 
 Describe `discover_tools`, `select_toolset`, `get_active_toolset`, and `reset_toolset`, including explicit risky opt-in and the static-client fallback.
 
+Correct the stale README inventory to distinguish 497 legacy tools from the four
+dynamic management tools (501 only for dynamic full startup/reset compatibility),
+and document static/dynamic directory as 15/22.
+
 In `scripts/gen-tool-docs.ts`, import `utilRegistrars`, capture them with a context containing `dynamicToolsets: true`, add a `Dynamic toolset management` group, and keep the generated total at 501. Do not hand-edit generated `docs/reference/tools.md`; regenerate through the script.
 
 - [ ] **Step 3: Expose config choices in distribution manifests**
@@ -2094,6 +2267,17 @@ In `scripts/gen-tool-docs.ts`, import `utilRegistrars`, capture them with a cont
 In `mcpb/manifest.json`, pass through `TDMCP_DYNAMIC_TOOLSETS`, `TDMCP_TOOL_MAX_ACTIVE`, and `TDMCP_TOOL_METADATA_BUDGET_KB`; add corresponding user config entries with defaults off/120/256. Expand the profile description to all eight values.
 
 In `server.json`, retain registry default `directory`, expand profile choices, and add dynamic mode default `off`. Do not change package version in this implementation wave.
+
+In `smithery.yaml`, expose all eight profiles and pass dynamic mode plus both limits
+with package-compatible `off`/`120`/`256` defaults. Update `docs/DEPLOYMENT.md` with
+the same MCPB/Smithery/registry inventory and any intentional registry limitation.
+
+Extend `mcpbManifest.test.ts` and add `dynamicToolsetDocsParity.test.ts`, sourcing
+expectations from the profile constants/generated manifest rather than duplicated
+production prose. Compare profile choices and `off`/`120`/`256` defaults across
+MCPB, `server.json`, and Smithery; preserve registry `directory`/raw-off startup;
+lock 497/501 and 15/22 count wording plus both fallback/rollback snippets across
+README and English/Portuguese references and deployment docs.
 
 Update `safeskill.manifest.json` to say presets are safe by construction and risky tools require exact opt-in plus existing approval/environment gates.
 
@@ -2124,7 +2308,7 @@ Run:
 rtk npm run docs:gen
 rtk npm run docs:build
 rtk npm run tools:metadata:check
-rtk test node scripts/run-vitest.mjs run tests/unit/mcpbManifest.test.ts
+rtk test node scripts/run-vitest.mjs run tests/unit/mcpbManifest.test.ts tests/unit/dynamicToolsetDocsParity.test.ts
 rtk git diff --check
 ```
 
@@ -2135,7 +2319,7 @@ Expected: docs report 501 total tools, VitePress builds, manifest tests pass, an
 Run:
 
 ```bash
-rtk git add README.md docs/reference/environment.md docs/reference/architecture.md scripts/gen-tool-docs.ts docs/reference/tools.md mcpb/manifest.json server.json safeskill.manifest.json CHANGELOG.md
+rtk git add README.md docs/reference/environment.md docs/reference/architecture.md docs/pt/reference/environment.md docs/pt/reference/architecture.md docs/DEPLOYMENT.md scripts/gen-tool-docs.ts docs/reference/tools.md mcpb/manifest.json server.json smithery.yaml safeskill.manifest.json CHANGELOG.md tests/unit/mcpbManifest.test.ts tests/unit/dynamicToolsetDocsParity.test.ts
 rtk git commit -m "docs: document dynamic MCP toolsets"
 ```
 
@@ -2195,9 +2379,9 @@ Dispatch `tdmcp-quality-qa` with all audit reports, implementation diffs, and co
 ## Final status
 - PASS: configuration defaults and validation
 - PASS: static 497/458/15 compatibility
-- PASS: dynamic 501/462/19 and core 17 counts
+- PASS: dynamic 501/462/22 and core 17 counts
 - PASS: core <=65,536 bytes and presets <=120/262,144
-- PASS: risky/raw gate composition and atomic rollback
+- PASS: risky/raw gate composition, active-safe validated macro dispatch, and atomic rollback
 - PASS: stdio list-change and HTTP session isolation
 - PASS: bilingual top-five discovery evaluation
 - PASS: Inspector and explained Conformance results
@@ -2206,7 +2390,7 @@ Dispatch `tdmcp-quality-qa` with all audit reports, implementation diffs, and co
 
 Replace any line with FAIL if its evidence command failed. QA must approve before personal config mutation.
 
-- [ ] **Step 4: Confirm the personal config target without exposing secrets**
+- [ ] **Step 4: Prove the exact configured primary artifact before rollout**
 
 Run:
 
@@ -2214,9 +2398,31 @@ Run:
 codex mcp get tdmcp --json
 ```
 
-Expected: stdio command still points to the bundled Node runtime and this checkout's `dist/index.js`; current env has no dynamic override. Do not print unrelated config sections or secret values.
+Resolve the exact stdio command and JavaScript argument without printing unrelated
+config or secret values. The configured path, not the worktree's `dist`, is the
+rollout target. Require its primary checkout to be at the QA-approved implementation
+commit and clean except for the protected unrelated `pnpm-lock.yaml`; stop on any
+commit/path mismatch. Store the validated absolute path as
+`TDMCP_CONFIGURED_ARTIFACT`, build in that primary checkout, record SHA-256 for the
+exact configured artifact, and run:
 
-- [ ] **Step 5: Patch only the tdmcp environment table**
+```bash
+TDMCP_INSPECTOR_SERVER="$TDMCP_CONFIGURED_ARTIFACT" rtk npm run test:mcp:inspector
+```
+
+The Inspector harness supplies temporary core/dynamic overrides. Stop before any
+personal config edit if the exact configured artifact does not produce the verified
+17-tool contract or its commit/fingerprint is not the approved one.
+
+- [ ] **Step 5: Hash the existing approval blocks without exposing them**
+
+Canonicalize every `[mcp_servers.tdmcp.tools.*]` block in file order into a
+mode-`0600` temporary file, assert the expected count (currently 29), and record its
+SHA-256 without printing block contents. This pre-edit hash is a mandatory rollout
+gate; also record the existing tdmcp command/args and the absence of unexpected env
+keys.
+
+- [ ] **Step 6: Patch only the tdmcp environment table**
 
 Use `apply_patch` on `~/.codex/config.toml`, requesting filesystem approval for that exact file if required. Add beneath the existing `[mcp_servers.tdmcp]` command/args fields and before any nested per-tool tables:
 
@@ -2228,7 +2434,12 @@ TDMCP_DYNAMIC_TOOLSETS = "on"
 
 Do not remove or rewrite any existing `[mcp_servers.tdmcp.tools.*]` approval settings. Do not use `codex mcp remove`, because that would discard nested approval configuration.
 
-- [ ] **Step 6: Verify configured and measured startup surfaces**
+Canonicalize and hash the same blocks again immediately after the patch. Require
+the count and digest to match byte-for-byte, then securely remove only the two exact
+temporary snapshot files. On mismatch, restore the personal file from its exact
+pre-edit backup and stop.
+
+- [ ] **Step 7: Verify configured and measured startup surfaces**
 
 Run:
 
@@ -2240,7 +2451,7 @@ rtk test node scripts/run-vitest.mjs run tests/integration/dynamicToolsets.test.
 
 Expected: config JSON shows only the two non-secret env values; the measured list is exactly 17 tools and <=65,536 bytes. Note that the already-running Codex task may require an app restart before its UI refreshes; do not claim that unobservable refresh passed.
 
-- [ ] **Step 7: Record and dry-check rollback**
+- [ ] **Step 8: Record and dry-check rollback**
 
 Document the exact rollback without applying it:
 
@@ -2258,7 +2469,7 @@ rtk test node scripts/run-vitest.mjs run tests/integration/toolProfile.test.ts -
 
 Expected: static full lists exactly 497 original tools. Personal config remains compact unless the user explicitly asks to roll back.
 
-- [ ] **Step 8: Verify repository cleanliness and commit scope**
+- [ ] **Step 9: Verify repository cleanliness and commit scope**
 
 Run:
 
@@ -2276,16 +2487,16 @@ Expected: all planned repository files are committed, `pnpm-lock.yaml` is still 
 
 | Approved design area | Implementation/evidence task |
 | --- | --- |
-| Compatibility defaults, eight profiles, package limits | Task 2; exact count regression in Task 7 |
+| Compatibility defaults, exhaustive CLI/context/doctor coverage, eight profiles, package limits | Task 2; exact count regression in Task 7 |
 | Native lifecycle architecture and one interception pipeline | Tasks 4, 6, and 7 |
-| Exact 13/17 core and explicit inspect/build/show/library membership | Task 5; protocol checks in Task 8 |
-| Four native management tools and structured errors | Tasks 6 and 7 |
+| Exact 13/17 core, static/dynamic directory 15/22, and independent inspect/build/show/library membership | Task 5; protocol checks in Tasks 7 and 8 |
+| Four native management tools, discriminated results, custom state, and allowlisted redacted errors | Tasks 6 and 7 |
 | Risk, raw-Python, protected-core, count, and byte gates | Task 6; MCP regression in Task 8 |
 | Immutable 497-tool contracts and generated 501-entry metadata | Tasks 3 and 7 |
 | Korean/English deterministic discovery and close matches | Tasks 5 and 10 |
 | One list-change event, disabled-call behavior, and stdio-local state | Task 8; built stdio probes in Task 11 |
 | One manager per Streamable HTTP session | Task 9 |
-| Pinned Inspector and Conformance evidence | Tasks 11 and 12 |
+| Scripts-disabled dependency preflight plus pinned Inspector and Conformance evidence | Tasks 11 and 12 |
 | Source comparison, exact commits, licenses, and no copied runtime code | Task 13 |
 | Quality audit, full gates, honest hardware status, personal rollout, rollback | Tasks 1 and 14 |
 | Deferred agent runtime, process sandbox, Python sidecars, and SDK v2 migration | Explicitly excluded by Global Constraints; no implementation task |
@@ -2295,16 +2506,17 @@ Expected: all planned repository files are committed, `pnpm-lock.yaml` is still 
 ## Final Acceptance Checklist
 
 - [ ] Static `full`/`safe`/`directory` are 497/458/15.
-- [ ] Dynamic `full`/`safe`/`directory` are 501/462/19; dynamic `core` is 17.
+- [ ] Dynamic `full`/`safe`/`directory` are 501/462/22; dynamic `core` is 17; dynamic `directory` is the exact protected-core union.
 - [ ] Core is <=65,536 serialized bytes; ordinary presets are <=120 tools and <=262,144 bytes.
 - [ ] Original 497 names and fingerprints match `tests/fixtures/tool-contract-baseline.json`.
 - [ ] A failed transition changes zero handle states; a success emits one list-change notification.
-- [ ] Presets contain no raw/destructive tools; explicit risky activation respects raw-Python and Codex approval gates.
+- [ ] `full` is startup/reset compatibility only and is absent from compact-session selection; ordinary presets contain no raw/destructive tools; explicit risky activation respects raw-Python and Codex approval gates.
+- [ ] Macro nested dispatch reaches only active safe targets after target-input validation; raw/destructive targets are never invoked.
 - [ ] Two HTTP clients can hold different selections without leakage.
 - [ ] All 25 golden queries retrieve the expected tool in the top five.
 - [ ] Inspector passes from local pinned dependencies.
 - [ ] Conformance has no unexplained active-suite failure and no stale baseline.
 - [ ] Existing type, build, lint, test, coverage, bridge, recipe, docs, complexity, and dependency gates pass.
-- [ ] Personal Codex config selects core/dynamic while retaining every per-tool approval entry.
+- [ ] The configured primary artifact matches the approved commit/fingerprint and passes Inspector before rollout; personal Codex config selects core/dynamic while retaining the exact approval-block hash.
 - [ ] `pnpm-lock.yaml` is untouched and uncommitted.
 - [ ] Live/hardware status is reported as actual PASS, FAIL, or UNVERIFIED.
