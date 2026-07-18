@@ -30,6 +30,7 @@ const ALL_DYNAMIC_NAMES = [
 interface FakeHandleOptions {
   enabled?: boolean;
   failure?: unknown;
+  failureChangeNumbers?: ReadonlySet<number>;
 }
 
 interface TestSessionOptions {
@@ -41,6 +42,7 @@ interface TestSessionOptions {
   initiallyEnabled?: boolean;
   destructiveNames?: ReadonlySet<string>;
   failures?: ReadonlyMap<string, unknown>;
+  failureChangeNumbers?: ReadonlyMap<string, ReadonlySet<number>>;
 }
 
 interface TestSession {
@@ -57,7 +59,9 @@ function makeFakeHandle(
   operations: string[],
   options: FakeHandleOptions = {},
 ): RegisteredTool {
-  let remainingFailures = options.failure === undefined ? 0 : 1;
+  let remainingFailures =
+    options.failure === undefined || options.failureChangeNumbers !== undefined ? 0 : 1;
+  let changeNumber = 0;
   const handle = {
     enabled: options.enabled ?? true,
     handler: vi.fn(),
@@ -65,9 +69,10 @@ function makeFakeHandle(
     disable: () => handle.update({ enabled: false }),
     update: (updates: { enabled?: boolean }) => {
       if (updates.enabled !== undefined && updates.enabled !== handle.enabled) {
+        changeNumber += 1;
         operations.push(`${name}:${updates.enabled ? "enable" : "disable"}`);
-        if (remainingFailures > 0) {
-          remainingFailures -= 1;
+        if (remainingFailures > 0 || options.failureChangeNumbers?.has(changeNumber)) {
+          if (remainingFailures > 0) remainingFailures -= 1;
           throw options.failure;
         }
         handle.enabled = updates.enabled;
@@ -96,6 +101,7 @@ function makeSession(options: TestSessionOptions = {}): TestSession {
     const handle = makeFakeHandle(name, server, operations, {
       enabled: options.initiallyEnabled ?? true,
       failure: options.failures?.get(name),
+      failureChangeNumbers: options.failureChangeNumbers?.get(name),
     });
     handles.set(name, handle);
     manager.capture({
@@ -606,6 +612,45 @@ describe("ToolsetManager atomic transitions", () => {
     );
 
     expect(enabledSnapshot(session.handles)).toEqual(before);
+    expect(session.operations).toEqual([
+      `${optionalNames[0]}:enable`,
+      `${optionalNames[1]}:enable`,
+      `${optionalNames[0]}:disable`,
+    ]);
+    expect(session.notifier).not.toHaveBeenCalled();
+    expect(session.server.sendToolListChanged).toBe(originalNotify);
+    expect(JSON.stringify({ message: error.message, details: error.details })).not.toContain(
+      "SENTINEL",
+    );
+  });
+
+  it("uses the enabled fallback when a rollback update throws and preserves the snapshot", async () => {
+    const optionalNames = ["create_audio_reactive", "create_glsl_shader"];
+    const session = makeSession({
+      names: [...PROTECTED_CORE_TOOL_NAMES, ...optionalNames],
+      initiallyEnabled: false,
+      failures: new Map([
+        [optionalNames[0] as string, new Error("SENTINEL_ROLLBACK_UPDATE")],
+        [optionalNames[1] as string, new Error("SENTINEL_FORWARD_UPDATE")],
+      ]),
+      failureChangeNumbers: new Map([
+        [optionalNames[0] as string, new Set([2])],
+        [optionalNames[1] as string, new Set([1])],
+      ]),
+    });
+    session.manager.initialize();
+    session.operations.length = 0;
+    const before = enabledSnapshot(session.handles);
+    const profileBefore = session.manager.getActive().current_profile;
+    const originalNotify = session.server.sendToolListChanged;
+
+    const error = await rejectedWith(
+      session.manager.select({ tools: optionalNames }),
+      "toolset_transition_failed",
+    );
+
+    expect(enabledSnapshot(session.handles)).toEqual(before);
+    expect(session.manager.getActive().current_profile).toBe(profileBefore);
     expect(session.operations).toEqual([
       `${optionalNames[0]}:enable`,
       `${optionalNames[1]}:enable`,

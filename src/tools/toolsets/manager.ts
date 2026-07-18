@@ -426,8 +426,9 @@ export class ToolsetManager implements ToolsetController {
       try {
         handle.update({ enabled: wasEnabled });
       } catch {
-        // Continue restoring every remaining handle without exposing lifecycle failures.
+        handle.enabled = wasEnabled;
       }
+      if (handle.enabled !== wasEnabled) handle.enabled = wasEnabled;
     }
   }
 
