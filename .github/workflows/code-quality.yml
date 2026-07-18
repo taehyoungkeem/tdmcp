@@ -170,6 +170,9 @@ jobs:
       - name: Verify generated command catalog is committed
         run: git diff --exit-code -- src/agentCommandCatalog.ts
 
+      - name: Verify generated MCP tool metadata
+        run: npm run tools:metadata:check
+
       - name: Build docs
         run: npm run docs:build
 

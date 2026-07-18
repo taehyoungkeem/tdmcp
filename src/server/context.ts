@@ -65,6 +65,7 @@ export function buildToolContext(
     vault,
     allowRawPython: config.rawPython !== "off",
     yolo: config.yolo,
+    ragApplyCard: config.ragApplyCard,
     toolProfile: config.toolProfile,
     dynamicToolsets: config.dynamicToolsets === "on",
     toolMaxActive: config.toolMaxActive,

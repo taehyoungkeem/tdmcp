@@ -29,6 +29,8 @@ export interface ToolContext {
    * default so nothing is silently skipped.
    */
   yolo?: boolean;
+  /** Whether the Creative RAG apply-card tool is admitted for this server instance. */
+  ragApplyCard?: boolean;
   /**
    * Tool exposure profile. `"safe"` hides destructive/raw-code tools; `"directory"`
    * exposes a small registry-facing build/inspect surface.

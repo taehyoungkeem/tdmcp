@@ -77,3 +77,8 @@ export interface ToolsetController {
   getActive(): ActiveToolsetOutput;
   reset(): Promise<ToolsetTransitionOutput>;
 }
+
+export interface GeneratedToolMetadataEntry {
+  bytes: number;
+  fingerprint: string;
+}
