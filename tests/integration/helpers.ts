@@ -12,19 +12,35 @@ export interface ResourceClientSession {
   close: () => Promise<void>;
 }
 
-export async function connectClient(clientName: string): Promise<ResourceClientSession> {
-  const config = loadConfig();
+export async function connectConfiguredClient(
+  clientName: string,
+  env: NodeJS.ProcessEnv,
+): Promise<ResourceClientSession> {
+  const config = loadConfig(env);
   const server = createTdmcpServer(config, { logger: silentLogger });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: clientName, version: "0.0.0" });
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  } catch (error) {
+    await Promise.allSettled([client.close(), server.close()]);
+    throw error;
+  }
+
+  let closed = false;
 
   return {
     client,
     close: async () => {
+      if (closed) return;
+      closed = true;
       await Promise.all([client.close(), server.close()]);
     },
   };
+}
+
+export async function connectClient(clientName: string): Promise<ResourceClientSession> {
+  return connectConfiguredClient(clientName, {});
 }
 
 export async function closeSessions(sessions: ResourceClientSession[]): Promise<void> {
