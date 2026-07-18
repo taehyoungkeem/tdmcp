@@ -554,6 +554,16 @@ features that tdmcp does not advertise are not failures. Missing prerequisites f
 advertised behavior are failures, not silent skips. Any temporary expected-failure
 file must name the exact scenario, spec basis, owner, and removal condition.
 
+For published Conformance `0.2.0-alpha.9` at protocol `2025-11-25`, the active
+server suite contains exactly 30 scenarios. Tdmcp advertises MCP logging and relies
+on SDK `1.29.0`'s session-local `logging/setLevel` handler, so logging is a required
+pass. Twenty fixture-specific scenarios are explicitly baselined because production
+tdmcp does not expose the verifier's hard-coded test tools/resources/prompts; all
+twenty must actually execute. The remaining ten scenarios must pass. In particular,
+`tools-call-simple-text` and `tools-call-error` stay outside the baseline because
+this pinned verifier accepts tdmcp's well-formed unknown-tool error response for
+those two checks; listing either would create a stale-baseline failure.
+
 The verified published CLI contract is:
 
 ```text

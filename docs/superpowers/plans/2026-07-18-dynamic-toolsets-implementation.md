@@ -2073,14 +2073,16 @@ Expected: exact dependency version and no floating network execution in the harn
 - Create: `scripts/test-mcp-conformance.mjs`
 - Create: `tests/contract/conformance-expected-failures.yml`
 - Create: `tests/contract/conformance-expected-failures.md`
+- Create: `tests/integration/loggingCapability.test.ts`
+- Modify: `src/server/tdmcpServer.ts`
 - Modify: `package.json`
 - Modify: `package-lock.json`
 - Modify: `.gitignore`
 - Modify: `.github/workflows/ci.yml`
 
 **Interfaces:**
-- Consumes: built stateful HTTP server, pinned Conformance CLI, protocol version 2025-11-25, and loopback host protection.
-- Produces: machine-readable active-suite results, explicit fixture-only expected failures, CI artifacts, and a zero-unexplained-failure gate.
+- Consumes: built stateful HTTP server, SDK logging-level support, pinned Conformance CLI, protocol version 2025-11-25, and loopback host protection.
+- Produces: an advertised/working logging capability, machine-readable active-suite results, explicit fixture-only expected failures, CI artifacts, and a zero-unexplained-failure gate.
 
 - [ ] **Step 1: Resolve and audit the exact Conformance dependency before installation**
 
@@ -2100,14 +2102,31 @@ new `hasInstallScript`, the explicit allowlist, and license evidence pass. Expec
 exact version in `package.json`; only intended package/lock/policy changes. Do not
 run any upstream setup script manually.
 
-- [ ] **Step 2: Create the initial fixture-mismatch baseline**
+- [ ] **Step 2: Advertise and prove the logging capability**
+
+First create `tests/integration/loggingCapability.test.ts` using the in-memory MCP
+helper. Assert that initialize advertises `capabilities.logging` and that
+`client.setLoggingLevel("info")` returns the empty success result. Run the test and
+record the RED failure from the current missing capability:
+
+```bash
+rtk test node scripts/run-vitest.mjs run tests/integration/loggingCapability.test.ts
+```
+
+Then construct the `McpServer` in `src/server/tdmcpServer.ts` with
+`capabilities: { logging: {} }`. SDK `1.29.0` registers the standard
+`logging/setLevel` handler at construction and keeps the selected level per
+session. Re-run the focused test and require GREEN. This also makes the existing
+`sendLoggingMessage` path an advertised protocol feature instead of a caught
+capability error.
+
+- [ ] **Step 3: Create the initial fixture-mismatch baseline**
 
 Create `tests/contract/conformance-expected-failures.yml`:
 
 ```yaml
 server:
   - completion-complete
-  - tools-call-simple-text
   - tools-call-image
   - tools-call-mixed-content
   - tools-call-with-logging
@@ -2129,9 +2148,15 @@ server:
   - prompts-get-with-image
 ```
 
-Do not include `tools-call-error`: the upstream scenario accepts any well-formed `isError` result and therefore passes for an unknown fixture tool. Do not include lifecycle, ping, list, logging-level, DNS, resources-list, or prompts-list; tdmcp advertises those and must pass them.
+This is exactly 20 entries. Do not include `tools-call-simple-text`: pinned upstream
+`0.2.0-alpha.9` accepts any non-empty text content and therefore treats tdmcp's
+well-formed unknown-tool error text as a pass. Do not include `tools-call-error`:
+that scenario accepts a well-formed `isError` result and also passes for an unknown
+fixture tool. Do not include lifecycle, ping, list, logging-level, SSE multi-stream,
+DNS, resources-list, or prompts-list. After Step 2, tdmcp advertises those applicable
+features and all ten non-baselined active scenarios must pass.
 
-- [ ] **Step 3: Document every baseline entry and removal condition**
+- [ ] **Step 4: Document every baseline entry and removal condition**
 
 Create `tests/contract/conformance-expected-failures.md` with a table containing one row per YAML entry. Use these group explanations while still listing each scenario name:
 
@@ -2139,19 +2164,24 @@ Create `tests/contract/conformance-expected-failures.md` with a table containing
 | Scenario | Spec basis | Why expected for tdmcp | Owner | Removal condition |
 | --- | --- | --- | --- | --- |
 | `completion-complete` | MCP completion/complete | Upstream scenario hard-codes `test_prompt_with_arguments`; tdmcp does not ship conformance fixture prompts. | tdmcp maintainers | Upstream gains capability-aware generic completion or tdmcp adds a test-only fixture server outside production. |
-| `tools-call-simple-text` | MCP tools/call | Upstream requires `test_simple_text`; production tdmcp does not expose verifier fixture tools. | tdmcp maintainers | Run against a test-only fixture adapter or upstream makes the scenario generic. |
+| `tools-call-image` | MCP tools/call | Upstream requires `test_image_content`; production tdmcp does not expose verifier fixture tools. | tdmcp maintainers | Run against a test-only fixture adapter or upstream makes the scenario generic. |
 ```
 
-Repeat the tools explanation for each listed tools-call scenario using its exact required fixture name from upstream source; repeat equivalent exact rows for elicitation, resources, and prompts. State that a baseline entry passing is treated as stale and fails CI.
+Repeat the tools explanation for each listed tools-call scenario using its exact required fixture name from upstream source; repeat equivalent exact rows for elicitation, resources, and prompts. State that a baseline entry passing is treated as stale and fails CI. Also state that the harness separately requires all 20 baseline scenario names to execute, because pinned upstream does not diagnose a baseline entry that was never selected into the suite.
 
-- [ ] **Step 4: Implement the temporary HTTP runner with cleanup**
+- [ ] **Step 5: Implement the temporary HTTP runner with cleanup**
 
 Create `scripts/test-mcp-conformance.mjs` that:
 
 1. Reserves a free loopback port with `net.createServer().listen(0, "127.0.0.1")`, records the assigned port, then closes the probe.
 2. Removes and recreates `artifacts/mcp-conformance` with `fs.rm(outputDir, { recursive: true, force: true })` and `fs.mkdir(outputDir, { recursive: true })`.
-3. Spawns `node dist/index.js` with HTTP transport, the selected port, `TDMCP_TOOL_PROFILE=core`, dynamic on, and silent logs.
-4. Polls `http://127.0.0.1:<port>/mcp` until it returns any HTTP response, with a 15-second readiness deadline.
+3. Builds a clean child environment by removing every inherited `TDMCP_*` key,
+   then spawns `node dist/index.js` with HTTP transport/host `127.0.0.1`, the
+   selected port, `TDMCP_TOOL_PROFILE=core`, dynamic on, silent logs, events off,
+   raw Python off, and a randomized nonexistent absolute `TDMCP_CONFIG_FILE`.
+4. Polls `http://127.0.0.1:<port>/mcp` until it returns the expected no-session HTTP
+   response, while also checking that the server child is still alive, with a
+   15-second readiness deadline.
 5. Spawns the local `node_modules/.bin/conformance`. The verified published
    executable contract is shown below; pass the tokens after `conformance` as the
    subprocess arguments:
@@ -2164,8 +2194,16 @@ conformance server --url http://127.0.0.1:<port>/mcp
 --output-dir artifacts/mcp-conformance
 ```
 
-6. Reads every `checks.json`, writes `artifacts/mcp-conformance/summary.json` with counts by SUCCESS/FAILURE/WARNING and scenario, and fails if the CLI exits nonzero or a result is missing.
-7. Sends SIGTERM to the server in `finally`, waits five seconds, then SIGKILLs only that recorded child PID if necessary.
+6. Captures/drains stdout and stderr, applies a bounded timeout to the Conformance
+   child, and terminates it on timeout or runner exceptions.
+7. Recursively reads every `checks.json`; validates a top-level array, required
+   fields, and the status enum `SUCCESS|FAILURE|WARNING|SKIPPED|INFO`; requires
+   exactly 30 unique active scenario results, all 20 baseline scenario names to
+   have executed and failed as expected, and the ten non-baselined scenarios to
+   contain no `FAILURE` or `WARNING`. It writes
+   `artifacts/mcp-conformance/summary.json` with counts by status and scenario and
+   fails on a nonzero reconciled CLI exit or any missing result.
+8. Sends SIGTERM to the server in `finally`, waits five seconds, then SIGKILLs only that recorded child PID if necessary.
 
 Add `.gitignore`:
 
@@ -2174,7 +2212,7 @@ Add `.gitignore`:
 artifacts/mcp-conformance/
 ```
 
-- [ ] **Step 5: Run once without a baseline to audit actual failures**
+- [ ] **Step 6: Run once without a baseline to audit actual failures**
 
 Temporarily omit the `--expected-failures` arguments from the local invocation only, then run:
 
@@ -2183,9 +2221,15 @@ rtk npm run build
 rtk proxy node scripts/test-mcp-conformance.mjs --audit-unbaselined
 ```
 
-Expected: exit 1 is acceptable only for the named fixture-specific scenarios. Inspect every `checks.json`. If any lifecycle/list/security scenario fails, fix tdmcp or the harness; do not add it to the baseline. Remove any baseline entry that actually passes.
+Expected: exit 1 is acceptable only for the 20 named fixture-specific scenarios.
+Inspect all 30 scenario results. Require ten passes (`server-initialize`,
+`logging-set-level`, `ping`, `tools-list`, `tools-call-simple-text`,
+`tools-call-error`, `server-sse-multiple-streams`, `resources-list`, `prompts-list`,
+and `dns-rebinding-protection`). If any lifecycle/list/security scenario fails, fix
+tdmcp or the harness; do not add it to the baseline. Remove any baseline entry that
+actually passes.
 
-- [ ] **Step 6: Add the package command and verify reconciled results**
+- [ ] **Step 7: Add the package command and verify reconciled results**
 
 Add:
 
@@ -2199,21 +2243,28 @@ Run:
 rtk npm run test:mcp:conformance
 ```
 
-Expected: exit 0, no stale baseline entries, no unexplained failures, and populated machine-readable output.
+Expected: exit 0, 30 executed scenarios, exactly 20 explained failures, no stale or
+unexecuted baseline entries, ten clean passes, no warnings, and populated
+machine-readable output.
 
-- [ ] **Step 7: Add CI execution and artifact upload**
+- [ ] **Step 8: Add CI execution and artifact upload**
 
-Add a Node 22 `mcp-conformance` job to `.github/workflows/ci.yml` that installs, imports the knowledge base, builds, runs `npm run test:mcp:conformance`, and always uploads `artifacts/mcp-conformance` using the already-pinned `actions/upload-artifact` SHA with `if-no-files-found: error`. Add the result to `ci-success` just like Inspector.
+Add a Node 22 `mcp-conformance` job to `.github/workflows/ci.yml` with
+`needs: install-script-allowlist` that installs, imports the knowledge base, builds,
+runs `npm run test:mcp:conformance`, and always uploads
+`artifacts/mcp-conformance` using the already-pinned `actions/upload-artifact` SHA
+with `if-no-files-found: error`. Add the result to `ci-success` just like Inspector.
 
-- [ ] **Step 8: Run harness checks and commit**
+- [ ] **Step 9: Run harness checks and commit**
 
 Run:
 
 ```bash
 rtk npm run test:mcp:conformance
+rtk test node scripts/run-vitest.mjs run tests/integration/loggingCapability.test.ts
 rtk proxy ./node_modules/.bin/biome check scripts/test-mcp-conformance.mjs
 rtk git diff --check
-rtk git add package.json package-lock.json scripts/test-mcp-conformance.mjs tests/contract/conformance-expected-failures.yml tests/contract/conformance-expected-failures.md .gitignore .github/workflows/ci.yml
+rtk git add package.json package-lock.json scripts/test-mcp-conformance.mjs tests/contract/conformance-expected-failures.yml tests/contract/conformance-expected-failures.md tests/integration/loggingCapability.test.ts src/server/tdmcpServer.ts .gitignore .github/workflows/ci.yml
 rtk git commit -m "test: add pinned MCP conformance harness"
 ```
 
@@ -2374,7 +2425,7 @@ Run:
 
 ```bash
 rtk npm run tools:metadata:check
-rtk test node scripts/run-vitest.mjs run tests/unit/toolMetadata.test.ts tests/unit/toolProfiles.test.ts tests/unit/toolCatalog.test.ts tests/unit/toolsetManager.test.ts tests/unit/toolsetManagementTools.test.ts tests/integration/dynamicToolsets.test.ts tests/integration/httpDynamicToolsets.test.ts tests/eval/toolDiscoveryGolden.test.ts
+rtk test node scripts/run-vitest.mjs run tests/unit/toolMetadata.test.ts tests/unit/toolProfiles.test.ts tests/unit/toolCatalog.test.ts tests/unit/toolsetManager.test.ts tests/unit/toolsetManagementTools.test.ts tests/integration/dynamicToolsets.test.ts tests/integration/httpDynamicToolsets.test.ts tests/integration/loggingCapability.test.ts tests/eval/toolDiscoveryGolden.test.ts
 rtk npm run test:mcp:inspector
 rtk npm run test:mcp:conformance
 ```
@@ -2547,7 +2598,7 @@ Expected: all planned repository files are committed, `pnpm-lock.yaml` is still 
 - [ ] Two HTTP clients can hold different selections without leakage.
 - [ ] All 25 golden queries retrieve the expected tool in the top five.
 - [ ] Inspector passes from local pinned dependencies.
-- [ ] Conformance has no unexplained active-suite failure and no stale baseline.
+- [ ] Conformance executes exactly 30 active scenarios: 10 clean passes (including advertised `logging/setLevel`) and 20 executed fixture-specific expected failures, with no warning, unexplained failure, stale entry, or unexecuted baseline entry.
 - [ ] Existing type, build, lint, test, coverage, bridge, recipe, docs, complexity, and dependency gates pass.
 - [ ] The configured primary artifact matches the approved commit/fingerprint and passes Inspector before rollout; personal Codex config selects core/dynamic while retaining the exact approval-block hash.
 - [ ] `pnpm-lock.yaml` is untouched and uncommitted.
