@@ -50,6 +50,7 @@ interface ScoreCategory {
   label: string;
   ceiling: number;
   fields: readonly string[];
+  allowPrefix: boolean;
 }
 
 function compareAscii(a: string, b: string): number {
@@ -77,14 +78,18 @@ function tokens(value: string): string[] {
   return value ? value.split(" ") : [];
 }
 
-function tokenMatches(queryToken: string, fieldToken: string): boolean {
-  return fieldToken === queryToken || fieldToken.startsWith(queryToken);
+function tokenMatches(queryToken: string, fieldToken: string, allowPrefix: boolean): boolean {
+  return fieldToken === queryToken || (allowPrefix && fieldToken.startsWith(queryToken));
 }
 
-function matchedQueryTokens(queryTokens: readonly string[], fields: readonly string[]): number {
+function matchedQueryTokens(
+  queryTokens: readonly string[],
+  fields: readonly string[],
+  allowPrefix: boolean,
+): number {
   const fieldTokens = fields.flatMap(tokens);
   return queryTokens.filter((queryToken) =>
-    fieldTokens.some((fieldToken) => tokenMatches(queryToken, fieldToken)),
+    fieldTokens.some((fieldToken) => tokenMatches(queryToken, fieldToken, allowPrefix)),
   ).length;
 }
 
@@ -138,8 +143,12 @@ function levenshteinDistance(a: string, b: string): number {
 }
 
 function indexRegistration(registration: CapturedToolRegistration): IndexedCatalogEntry {
-  const override = TOOL_DISCOVERY_OVERRIDES[registration.name];
-  const metadata = TOOL_METADATA[registration.name];
+  const override = Object.hasOwn(TOOL_DISCOVERY_OVERRIDES, registration.name)
+    ? TOOL_DISCOVERY_OVERRIDES[registration.name]
+    : undefined;
+  const metadata = Object.hasOwn(TOOL_METADATA, registration.name)
+    ? TOOL_METADATA[registration.name]
+    : undefined;
   if (!metadata && !DYNAMIC_MANAGEMENT_TOOL_NAME_SET.has(registration.name)) {
     throw new Error(`Missing generated metadata for ${registration.name}`);
   }
@@ -147,6 +156,7 @@ function indexRegistration(registration: CapturedToolRegistration): IndexedCatal
   const summary = displaySummary(registration.description);
   const aliases = override?.aliases.map(normalizeDiscoveryText).filter(Boolean) ?? [];
   const tags = override?.tags.map(normalizeDiscoveryText).filter(Boolean) ?? [];
+  const readOnly = registration.annotations?.readOnlyHint ?? false;
   const entry: ToolCatalogEntry = {
     name: registration.name,
     title: registration.title,
@@ -154,12 +164,12 @@ function indexRegistration(registration: CapturedToolRegistration): IndexedCatal
     group: registration.group,
     tags: [...(override?.tags ?? [])],
     presets: presetsFor(registration.name),
-    readOnly: registration.annotations?.readOnlyHint === true,
+    readOnly,
     destructive:
-      registration.annotations?.destructiveHint === true ||
-      SAFE_PROFILE_EXCLUDE.has(registration.name),
+      SAFE_PROFILE_EXCLUDE.has(registration.name) ||
+      (registration.annotations?.destructiveHint ?? !readOnly),
     rawCode: RAW_CODE_NAME_SET.has(registration.name),
-    openWorld: registration.annotations?.openWorldHint === true,
+    openWorld: registration.annotations?.openWorldHint ?? true,
     metadataBytes: metadata?.bytes ?? 0,
   };
   return {
@@ -206,7 +216,7 @@ export class ToolCatalog {
     if (!normalizedQuery) {
       throw new TypeError("Discovery query must be non-empty after normalization.");
     }
-    const queryTokens = tokens(normalizedQuery);
+    const queryTokens = [...new Set(tokens(normalizedQuery))];
     const requestedRisk = input.risk ?? "safe_mutation";
     const candidates: DiscoverToolCandidate[] = [];
 
@@ -224,13 +234,33 @@ export class ToolCatalog {
         reasons.push("exact alias");
       } else {
         const categories: readonly ScoreCategory[] = [
-          { label: "name", ceiling: 600, fields: [indexed.normalizedName] },
-          { label: "alias/tag", ceiling: 350, fields: indexed.normalizedAliasAndTags },
-          { label: "title", ceiling: 200, fields: [indexed.normalizedTitle] },
-          { label: "summary", ceiling: 100, fields: [indexed.normalizedSummary] },
+          {
+            label: "name",
+            ceiling: 600,
+            fields: [indexed.normalizedName],
+            allowPrefix: true,
+          },
+          {
+            label: "alias/tag",
+            ceiling: 350,
+            fields: indexed.normalizedAliasAndTags,
+            allowPrefix: false,
+          },
+          {
+            label: "title",
+            ceiling: 200,
+            fields: [indexed.normalizedTitle],
+            allowPrefix: false,
+          },
+          {
+            label: "summary",
+            ceiling: 100,
+            fields: [indexed.normalizedSummary],
+            allowPrefix: false,
+          },
         ];
         for (const category of categories) {
-          const matched = matchedQueryTokens(queryTokens, category.fields);
+          const matched = matchedQueryTokens(queryTokens, category.fields, category.allowPrefix);
           if (matched === 0) continue;
           score += Math.round(category.ceiling * (matched / queryTokens.length));
           reasons.push(`${category.label} ${matched}/${queryTokens.length}`);

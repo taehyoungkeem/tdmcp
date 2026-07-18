@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { buildToolContext } from "../../src/server/context.js";
 import { registerAllTools } from "../../src/tools/index.js";
 import { normalizeDiscoveryText, ToolCatalog } from "../../src/tools/toolsets/catalog.js";
+import { TOOL_DISCOVERY_OVERRIDES } from "../../src/tools/toolsets/overrides.js";
 import type {
   CapturedToolRegistration,
   ToolGroup,
@@ -37,6 +38,13 @@ function fakeCapture(
     },
     handle: {} as RegisteredTool,
   };
+}
+
+function fakeCaptureWithAnnotations(
+  name: string,
+  annotations: CapturedToolRegistration["annotations"],
+): CapturedToolRegistration {
+  return { ...fakeCapture(name), annotations };
 }
 
 let catalog: ToolCatalog;
@@ -124,7 +132,11 @@ describe("ToolCatalog", () => {
       }),
     ]);
 
-    expect(precise.discover({ query: "node absent missing" }).candidates[0]?.score).toBe(300);
+    const score = precise.discover({ query: "node absent missing" }).candidates[0]?.score;
+    expect(score).toBe(300);
+    expect(precise.discover({ query: "node node absent missing" }).candidates[0]?.score).toBe(
+      score,
+    );
   });
 
   it("combines alias and tag coverage under one 350-point ceiling", () => {
@@ -142,7 +154,7 @@ describe("ToolCatalog", () => {
     const prefixResult = precise.discover({ query: "create audio react", risk: "any" });
     expect(prefixResult.candidates[0]).toMatchObject({
       name: "create_audio_reactive",
-      score: 833,
+      score: 717,
     });
 
     const exactAlias = precise.discover({ query: "AUDIO REACTIVE VISUAL" });
@@ -152,6 +164,86 @@ describe("ToolCatalog", () => {
     });
     expect(exactAlias.candidates[0]?.score).toBe(1000);
     expect(exactAliasWithPreset.candidates[0]?.score).toBe(1025);
+  });
+
+  it("allows prefixes only for tool-name tokens", () => {
+    const titleAndSummary = new ToolCatalog([
+      fakeCapture("get_td_node_errors", {
+        title: "Elephant observer",
+        description: "Elephant report.",
+        readOnly: true,
+      }),
+    ]);
+    expect(titleAndSummary.discover({ query: "ele" }).candidates).toEqual([]);
+
+    const namePrefix = new ToolCatalog([fakeCapture("get_td_node_errors", { readOnly: true })]);
+    expect(namePrefix.discover({ query: "erro" }).candidates[0]).toMatchObject({
+      name: "get_td_node_errors",
+      score: 600,
+    });
+  });
+
+  it("applies conservative MCP defaults when annotations are absent", () => {
+    const absent = new ToolCatalog([fakeCaptureWithAnnotations("get_td_node_errors", undefined)]);
+
+    expect(absent.get("get_td_node_errors")).toMatchObject({
+      readOnly: false,
+      destructive: true,
+      openWorld: true,
+    });
+    expect(absent.discover({ query: "get_td_node_errors" }).candidates).toEqual([]);
+    expect(
+      absent.discover({ query: "get_td_node_errors", risk: "any" }).candidates[0],
+    ).toMatchObject({ name: "get_td_node_errors", risk: "destructive" });
+  });
+
+  it("treats read-only and additive partial annotations according to MCP defaults", () => {
+    const partial = new ToolCatalog([
+      fakeCaptureWithAnnotations("get_td_node_errors", { readOnlyHint: true }),
+      fakeCaptureWithAnnotations("create_td_node", { destructiveHint: false }),
+    ]);
+
+    expect(partial.get("get_td_node_errors")).toMatchObject({
+      readOnly: true,
+      destructive: false,
+      openWorld: true,
+    });
+    expect(partial.discover({ query: "get_td_node_errors" }).candidates[0]).toMatchObject({
+      name: "get_td_node_errors",
+      risk: "read_only",
+    });
+    expect(partial.get("create_td_node")).toMatchObject({
+      readOnly: false,
+      destructive: false,
+      openWorld: true,
+    });
+    expect(partial.discover({ query: "create_td_node" }).candidates[0]).toMatchObject({
+      name: "create_td_node",
+      risk: "safe_mutation",
+    });
+  });
+
+  it.each([
+    "constructor",
+    "toString",
+    "__proto__",
+  ])("rejects inherited metadata key %s with a stable missing-metadata error", (name) => {
+    expect(() => new ToolCatalog([fakeCapture(name)])).toThrow(
+      `Missing generated metadata for ${name}`,
+    );
+  });
+
+  it("ignores inherited discovery overrides for real generated tool names", () => {
+    const originalPrototype = Object.getPrototypeOf(TOOL_DISCOVERY_OVERRIDES);
+    Object.setPrototypeOf(TOOL_DISCOVERY_OVERRIDES, {
+      get_td_node_errors: { aliases: ["prototype elephant"], tags: ["prototype"] },
+    });
+    try {
+      const inherited = new ToolCatalog([fakeCapture("get_td_node_errors", { readOnly: true })]);
+      expect(inherited.discover({ query: "prototype elephant" }).candidates).toEqual([]);
+    } finally {
+      Object.setPrototypeOf(TOOL_DISCOVERY_OVERRIDES, originalPrototype);
+    }
   });
 
   it("orders equal scores by ascending ASCII tool name", () => {
