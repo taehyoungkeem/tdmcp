@@ -42,6 +42,22 @@ export function structuredResult(summary: string, data: object): CallToolResult 
   };
 }
 
+export type SafeStructuredError = Record<string, unknown>;
+
+/**
+ * A fixed public error summary plus a machine-readable, fail-closed payload.
+ *
+ * `ok: false` is written last so callers cannot accidentally override the
+ * error discriminator through `data`.
+ */
+export function structuredErrorResult(summary: string, data: SafeStructuredError): CallToolResult {
+  return {
+    isError: true,
+    content: [{ type: "text", text: summary }],
+    structuredContent: { ...data, ok: false },
+  };
+}
+
 /** An image block (base64), optionally preceded by a caption. */
 export function imageResult(
   base64: string,

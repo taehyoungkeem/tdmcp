@@ -4,6 +4,7 @@ import { createLazyLlmClient } from "../llm/resolve.js";
 import { registerAllPrompts } from "../prompts/index.js";
 import { registerAllResources } from "../resources/index.js";
 import { registerAllTools } from "../tools/index.js";
+import { ToolsetManager } from "../tools/toolsets/index.js";
 import type { TdmcpConfig } from "../utils/config.js";
 import { getVersion } from "../utils/version.js";
 import { buildToolContext, type ToolContextOverrides } from "./context.js";
@@ -21,6 +22,16 @@ Token economy: read tools return a lot — scope every read (a parent path, a na
 
 The server stays usable even when TouchDesigner is offline; tools return a friendly error in that case.`;
 
+const DYNAMIC_TOOLSET_INSTRUCTIONS = `${INSTRUCTIONS}
+
+Dynamic toolsets are enabled for this session:
+1. Call discover_tools to find the original task tool by name, preset, risk, and summary.
+2. Call select_toolset with exactly one preset or explicit tool list; risky explicit tools require opt-in.
+3. When client_refresh_required is true, refresh tools/list before continuing because client visibility may lag.
+4. Call the original discovered tool after it appears in the refreshed list.
+
+If the client cannot refresh dynamic tools, set a static TDMCP_TOOL_PROFILE and restart the server.`;
+
 export type TdmcpServerOverrides = ToolContextOverrides;
 
 /** Builds a fully wired (but not yet connected) MCP server. */
@@ -33,7 +44,7 @@ export function createTdmcpServer(
 
   const server = new McpServer(
     { name: "tdmcp", version: getVersion() },
-    { instructions: INSTRUCTIONS },
+    { instructions: ctx.dynamicToolsets ? DYNAMIC_TOOLSET_INSTRUCTIONS : INSTRUCTIONS },
   );
 
   // Wire the LLM shim now that the underlying Server exists. Sampling capability
@@ -43,13 +54,27 @@ export function createTdmcpServer(
   // before the client's initialize request arrives.
   ctx.llm = createLazyLlmClient(config, server.server);
 
-  // Expose the live server to tools that introspect the registry
-  // (e.g. elicit_missing_args). Set BEFORE registerAllTools runs.
+  const toolsets = ctx.dynamicToolsets
+    ? new ToolsetManager({
+        server,
+        startupProfile: ctx.toolProfile ?? "full",
+        maxActive: ctx.toolMaxActive ?? 120,
+        metadataBudgetBytes: ctx.toolMetadataBudgetBytes ?? 256 * 1024,
+        allowRawPython: ctx.allowRawPython !== false,
+      })
+    : undefined;
+
+  // Expose session-local dependencies before registration. Dynamic mode captures
+  // every native handle, then initializes the requested startup profile before
+  // resources or prompts can observe the server.
+  ctx.toolsets = toolsets;
   ctx.server = server;
   registerAllTools(server, ctx, {
     dynamic: ctx.dynamicToolsets === true,
     macroRecorder: getMacroRecorder(),
+    onRegistered: (entry) => toolsets?.capture(entry),
   });
+  toolsets?.initialize();
   registerAllResources(server, {
     knowledge,
     recipes,

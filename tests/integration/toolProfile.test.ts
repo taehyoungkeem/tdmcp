@@ -3,8 +3,10 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTdmcpServer } from "../../src/server/tdmcpServer.js";
 import {
+  DYNAMIC_MANAGEMENT_TOOL_NAMES,
   DIRECTORY_PROFILE_TOOL_NAMES as POLICY_DIRECTORY_PROFILE_TOOL_NAMES,
   SAFE_PROFILE_EXCLUDE as POLICY_SAFE_PROFILE_EXCLUDE,
+  PROTECTED_CORE_TOOL_NAMES,
 } from "../../src/tools/toolsets/profiles.js";
 import { loadConfig } from "../../src/utils/config.js";
 import { silentLogger } from "../../src/utils/logger.js";
@@ -16,15 +18,23 @@ beforeAll(() => mock.listen({ onUnhandledRequest: "error" }));
 afterEach(() => mock.resetHandlers());
 afterAll(() => mock.close());
 
-// Copied verbatim from tests/integration/layer3.test.ts — introspects the
-// assembled server over the in-memory MCP transport (msw mocks the bridge).
-async function connectClient(env: NodeJS.ProcessEnv = {}) {
+// Introspects the assembled server over an in-memory MCP transport (msw mocks
+// the bridge). Both endpoints close in finally so table-driven profile checks
+// cannot leak sessions.
+async function withClient<T>(
+  env: NodeJS.ProcessEnv,
+  inspect: (client: Client) => Promise<T>,
+): Promise<T> {
   const config = loadConfig(env); // defaults → 127.0.0.1:9980 (matches the mock bridge)
   const server = createTdmcpServer(config, { logger: silentLogger });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "tdmcp-test-client", version: "0.0.0" });
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  return client;
+  try {
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    return await inspect(client);
+  } finally {
+    await Promise.allSettled([client.close(), server.close()]);
+  }
 }
 
 // The tools the `safe` profile drops. Must equal the set flagged
@@ -102,9 +112,7 @@ const DIRECTORY_PROFILE_TOOLS = [
 ];
 
 async function toolList(env: NodeJS.ProcessEnv = {}) {
-  const client = await connectClient(env);
-  const { tools } = await client.listTools();
-  return tools;
+  return withClient(env, async (client) => (await client.listTools()).tools);
 }
 
 async function toolNames(env: NodeJS.ProcessEnv = {}): Promise<string[]> {
@@ -113,6 +121,39 @@ async function toolNames(env: NodeJS.ProcessEnv = {}): Promise<string[]> {
 }
 
 describe("integration: TDMCP_TOOL_PROFILE", () => {
+  const expectedCounts = [
+    [{ TDMCP_TOOL_PROFILE: "full" }, 497],
+    [{ TDMCP_TOOL_PROFILE: "safe" }, 458],
+    [{ TDMCP_TOOL_PROFILE: "directory" }, 15],
+    [{ TDMCP_TOOL_PROFILE: "core" }, 13],
+    [{ TDMCP_TOOL_PROFILE: "full", TDMCP_DYNAMIC_TOOLSETS: "on" }, 501],
+    [{ TDMCP_TOOL_PROFILE: "safe", TDMCP_DYNAMIC_TOOLSETS: "on" }, 462],
+    [{ TDMCP_TOOL_PROFILE: "directory", TDMCP_DYNAMIC_TOOLSETS: "on" }, 22],
+    [{ TDMCP_TOOL_PROFILE: "core", TDMCP_DYNAMIC_TOOLSETS: "on" }, 17],
+  ] as const;
+
+  it.each(expectedCounts)("locks %o to %i tools", async (env, expectedCount) => {
+    const names = await toolNames(env);
+    expect(names).toHaveLength(expectedCount);
+    const dynamic = "TDMCP_DYNAMIC_TOOLSETS" in env && env.TDMCP_DYNAMIC_TOOLSETS === "on";
+    for (const managementName of DYNAMIC_MANAGEMENT_TOOL_NAMES) {
+      if (dynamic) expect(names).toContain(managementName);
+      else expect(names).not.toContain(managementName);
+    }
+  });
+
+  it("dynamic directory is the exact legacy directory and protected-core union", async () => {
+    const names = await toolNames({
+      TDMCP_TOOL_PROFILE: "directory",
+      TDMCP_DYNAMIC_TOOLSETS: "on",
+    });
+    const expected = [
+      ...new Set([...DIRECTORY_PROFILE_TOOLS, ...PROTECTED_CORE_TOOL_NAMES]),
+    ].sort();
+    expect(names.sort()).toEqual(expected);
+    expect(names).toHaveLength(22);
+  });
+
   it("keeps the centralized profile policy equal to the locked legacy names", () => {
     expect([...POLICY_SAFE_PROFILE_EXCLUDE]).toEqual(SAFE_PROFILE_EXCLUDE);
     expect(POLICY_DIRECTORY_PROFILE_TOOL_NAMES).toEqual(DIRECTORY_PROFILE_TOOLS);

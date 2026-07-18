@@ -9,9 +9,16 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
  * CLI ↔ tool parity gate: every exported `…Impl` tool handler under src/tools
  * must be wired into the tdmcp-agent COMMANDS map in src/cli/agent.ts.
  *
- * Tools that must intentionally stay MCP-only go in ALLOWLIST (target: empty).
+ * Tools that must intentionally stay MCP-only go in ALLOWLIST. Dynamic toolset
+ * controls are session/server-handle operations: the standalone agent CLI has
+ * no McpServer tool registry or list_changed lifecycle to control.
  */
-const ALLOWLIST: readonly string[] = [];
+const ALLOWLIST: readonly string[] = [
+  "discoverToolsImpl",
+  "getActiveToolsetImpl",
+  "resetToolsetImpl",
+  "selectToolsetImpl",
+];
 
 const TOOLS_DIR = join(root, "src", "tools");
 const AGENT_SRC = readFileSync(join(root, "src", "cli", "agent.ts"), "utf8");
@@ -59,11 +66,17 @@ describe("CLI ↔ tool parity", () => {
     expect(missing).toEqual([]);
   });
 
-  it("keeps the MCP-only allowlist honest (no stale entries)", () => {
+  it("keeps the fixed MCP-session-only allowlist honest and out of COMMANDS", () => {
     const impls = new Set(exportedImpls());
     const stale = ALLOWLIST.filter(
       (name) => !impls.has(name) || new RegExp(`\\b${name}\\b`).test(COMMANDS_SRC),
     );
     expect(stale).toEqual([]);
+    expect(ALLOWLIST).toEqual([
+      "discoverToolsImpl",
+      "getActiveToolsetImpl",
+      "resetToolsetImpl",
+      "selectToolsetImpl",
+    ]);
   });
 });

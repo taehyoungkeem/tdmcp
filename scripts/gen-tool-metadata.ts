@@ -5,6 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { createTdmcpServer } from "../src/server/tdmcpServer.js";
 import { fingerprintTool } from "../src/tools/toolsets/metadata.js";
+import { DYNAMIC_MANAGEMENT_TOOL_NAMES } from "../src/tools/toolsets/profiles.js";
 import type { GeneratedToolMetadataEntry } from "../src/tools/toolsets/types.js";
 import { loadConfig } from "../src/utils/config.js";
 import { silentLogger } from "../src/utils/logger.js";
@@ -18,17 +19,18 @@ const BASELINE_PATH = fileURLToPath(
   new URL("../tests/fixtures/tool-contract-baseline.json", import.meta.url),
 );
 const LEGACY_TOOL_COUNT = 497;
+const DYNAMIC_TOOL_COUNT = 501;
 
 function explicitGeneratorEnv(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
-    TDMCP_TOOL_PROFILE: "full",
-    TDMCP_DYNAMIC_TOOLSETS: "off",
+    TDMCP_TOOL_PROFILE: overrides.TDMCP_TOOL_PROFILE ?? "full",
+    TDMCP_DYNAMIC_TOOLSETS: overrides.TDMCP_DYNAMIC_TOOLSETS ?? "off",
     TDMCP_RAW_PYTHON: "on",
     TDMCP_EVENTS: "off",
     TDMCP_LOG_LEVEL: "silent",
     TDMCP_RAG_ENABLED: "0",
     TDMCP_PROJECT_RAG_ENABLED: "0",
-    TDMCP_RAG_APPLY_CARD: overrides.TDMCP_RAG_APPLY_CARD ?? "off",
+    TDMCP_RAG_APPLY_CARD: "off",
   };
 }
 
@@ -101,6 +103,78 @@ function renderBaseline(tools: readonly Tool[]): string {
   )}\n`;
 }
 
+interface ToolContractBaseline {
+  count: number;
+  fingerprints: Record<string, string>;
+}
+
+function compareAscii(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function readLegacyBaseline(): ToolContractBaseline {
+  if (!existsSync(BASELINE_PATH)) {
+    throw new Error(`Missing immutable legacy baseline: ${BASELINE_PATH}`);
+  }
+  const parsed = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as Partial<ToolContractBaseline>;
+  if (
+    parsed.count !== LEGACY_TOOL_COUNT ||
+    !parsed.fingerprints ||
+    typeof parsed.fingerprints !== "object" ||
+    Object.keys(parsed.fingerprints).length !== LEGACY_TOOL_COUNT
+  ) {
+    throw new Error("Immutable legacy baseline has an invalid shape or count.");
+  }
+  return parsed as ToolContractBaseline;
+}
+
+function assertLegacyContracts(
+  legacy: readonly Tool[],
+  dynamic: readonly Tool[],
+  baseline: ToolContractBaseline,
+): void {
+  if (legacy.length !== LEGACY_TOOL_COUNT) {
+    throw new Error(
+      `Legacy tool count drift: expected ${LEGACY_TOOL_COUNT}, received ${legacy.length}.`,
+    );
+  }
+  if (dynamic.length !== DYNAMIC_TOOL_COUNT) {
+    throw new Error(
+      `Dynamic tool count drift: expected ${DYNAMIC_TOOL_COUNT}, received ${dynamic.length}.`,
+    );
+  }
+
+  const legacyByName = new Map(legacy.map((tool) => [tool.name, tool]));
+  const dynamicByName = new Map(dynamic.map((tool) => [tool.name, tool]));
+  const baselineNames = Object.keys(baseline.fingerprints).sort(compareAscii);
+  const legacyNames = [...legacyByName.keys()].sort(compareAscii);
+  if (JSON.stringify(legacyNames) !== JSON.stringify(baselineNames)) {
+    throw new Error("Legacy tool names drifted from the immutable baseline.");
+  }
+
+  for (const name of baselineNames) {
+    const expected = baseline.fingerprints[name];
+    const legacyTool = legacyByName.get(name);
+    const dynamicTool = dynamicByName.get(name);
+    if (!legacyTool || fingerprintTool(legacyTool) !== expected) {
+      throw new Error(`Legacy tool fingerprint drift: ${name}`);
+    }
+    if (!dynamicTool || fingerprintTool(dynamicTool) !== expected) {
+      throw new Error(`Dynamic legacy tool fingerprint drift: ${name}`);
+    }
+  }
+
+  const dynamicOnly = [...dynamicByName.keys()]
+    .filter((name) => !legacyByName.has(name))
+    .sort(compareAscii);
+  const expectedDynamicOnly = [...DYNAMIC_MANAGEMENT_TOOL_NAMES].sort(compareAscii);
+  if (JSON.stringify(dynamicOnly) !== JSON.stringify(expectedDynamicOnly)) {
+    throw new Error(
+      `Unexpected dynamic-only tools: expected ${expectedDynamicOnly.join(", ")}, received ${dynamicOnly.join(", ")}.`,
+    );
+  }
+}
+
 function parseMode(args: readonly string[]): GeneratorMode | undefined {
   if (args.length !== 1) return undefined;
   const [mode] = args;
@@ -123,19 +197,28 @@ async function run(args: readonly string[]): Promise<number> {
   }
 
   try {
-    const tools = await collectFullTools({});
-    if (mode === "--write") {
-      writeFileSync(GENERATED_METADATA_PATH, renderMetadataModule(tools), "utf8");
-      console.log(`generated metadata entries: ${tools.length}`);
-      return 0;
-    }
+    const legacy = await collectFullTools({
+      TDMCP_TOOL_PROFILE: "full",
+      TDMCP_DYNAMIC_TOOLSETS: "off",
+    });
     if (mode === "--write-baseline") {
-      writeFileSync(BASELINE_PATH, renderBaseline(tools), { encoding: "utf8", flag: "wx" });
-      console.log(`legacy baseline entries: ${tools.length}`);
+      writeFileSync(BASELINE_PATH, renderBaseline(legacy), { encoding: "utf8", flag: "wx" });
+      console.log(`legacy baseline entries: ${legacy.length}`);
       return 0;
     }
 
-    const expected = renderMetadataModule(tools);
+    const dynamic = await collectFullTools({
+      TDMCP_TOOL_PROFILE: "full",
+      TDMCP_DYNAMIC_TOOLSETS: "on",
+    });
+    assertLegacyContracts(legacy, dynamic, readLegacyBaseline());
+    if (mode === "--write") {
+      writeFileSync(GENERATED_METADATA_PATH, renderMetadataModule(dynamic), "utf8");
+      console.log(`generated metadata entries: ${dynamic.length}`);
+      return 0;
+    }
+
+    const expected = renderMetadataModule(dynamic);
     const current = existsSync(GENERATED_METADATA_PATH)
       ? readFileSync(GENERATED_METADATA_PATH, "utf8")
       : undefined;

@@ -4,6 +4,7 @@ import { buildToolContext } from "../../src/server/context.js";
 import { registerAllTools } from "../../src/tools/index.js";
 import { normalizeDiscoveryText, ToolCatalog } from "../../src/tools/toolsets/catalog.js";
 import { TOOL_DISCOVERY_OVERRIDES } from "../../src/tools/toolsets/overrides.js";
+import { DYNAMIC_MANAGEMENT_TOOL_NAMES } from "../../src/tools/toolsets/profiles.js";
 import type {
   CapturedToolRegistration,
   ToolGroup,
@@ -48,11 +49,13 @@ function fakeCaptureWithAnnotations(
 }
 
 let catalog: ToolCatalog;
+let legacyCaptured: CapturedToolRegistration[];
+let dynamicCaptured: CapturedToolRegistration[];
 
-beforeAll(() => {
+function captureRegisteredTools(dynamic: boolean): CapturedToolRegistration[] {
   const config = loadConfig({
     TDMCP_TOOL_PROFILE: "full",
-    TDMCP_DYNAMIC_TOOLSETS: "on",
+    TDMCP_DYNAMIC_TOOLSETS: dynamic ? "on" : "off",
     TDMCP_RAW_PYTHON: "on",
     TDMCP_EVENTS: "off",
     TDMCP_RAG_ENABLED: "0",
@@ -65,11 +68,16 @@ beforeAll(() => {
   ctx.server = server;
   const captured: CapturedToolRegistration[] = [];
   registerAllTools(server, ctx, {
-    dynamic: true,
+    dynamic,
     onRegistered: (entry) => captured.push(entry),
   });
-  expect(captured).toHaveLength(497);
-  catalog = new ToolCatalog(captured);
+  return captured;
+}
+
+beforeAll(() => {
+  legacyCaptured = captureRegisteredTools(false);
+  dynamicCaptured = captureRegisteredTools(true);
+  catalog = new ToolCatalog(dynamicCaptured);
 });
 
 describe("normalizeDiscoveryText", () => {
@@ -79,6 +87,17 @@ describe("normalizeDiscoveryText", () => {
 });
 
 describe("ToolCatalog", () => {
+  it("preserves the immutable 497 legacy surface and exact 501 dynamic extension", () => {
+    const legacyNames = new Set(legacyCaptured.map((entry) => entry.name));
+    const dynamicNames = new Set(dynamicCaptured.map((entry) => entry.name));
+    expect(legacyNames.size).toBe(497);
+    expect(dynamicNames.size).toBe(501);
+    for (const name of DYNAMIC_MANAGEMENT_TOOL_NAMES) expect(legacyNames).not.toContain(name);
+    expect([...dynamicNames].filter((name) => !legacyNames.has(name)).sort()).toEqual(
+      [...DYNAMIC_MANAGEMENT_TOOL_NAMES].sort(),
+    );
+  });
+
   it("uses the exact independently reviewed names for every ordinary preset", () => {
     for (const preset of ORDINARY_PRESETS) {
       expect(catalog.namesForPreset(preset)).toEqual(approvedMembership[preset]);

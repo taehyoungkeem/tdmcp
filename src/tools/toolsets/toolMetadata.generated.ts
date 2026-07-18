@@ -1370,6 +1370,10 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     bytes: 1256,
     fingerprint: "f85a70b2d0727b1d703b9bf347436af08fa9fba3f9c07f9ef054593146d11b16",
   },
+  discover_tools: {
+    bytes: 2623,
+    fingerprint: "8cd8b9155224dead82e88a7578f85c3f0a622d3506e59499f565eedf559f4aab",
+  },
   document_network: {
     bytes: 837,
     fingerprint: "27c7f4f46d4ad7069a441aa23d9a0a35ad5138bcaea66acceb43f9f64ea32658",
@@ -1485,6 +1489,10 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
   generative_classics_pack: {
     bytes: 1211,
     fingerprint: "1ffab328468558723202b20e83ece9034e88fa21f0981650353fb3dc3ad982f0",
+  },
+  get_active_toolset: {
+    bytes: 1481,
+    fingerprint: "f00e4c6172c9be3b358063a4a7848eb0c64f5f49fbfe64cfa12d5654f6aa62de",
   },
   get_bridge_logs: {
     bytes: 2660,
@@ -1802,6 +1810,10 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
     bytes: 1512,
     fingerprint: "f86e619287699621039cf4122ef7247ee59513c9b335fe4c03c33d21a5946a41",
   },
+  reset_toolset: {
+    bytes: 2202,
+    fingerprint: "d69b8dabff9472fe9c924d2655e6eb54e908b183ee0796dd2db331472d34ded1",
+  },
   resolume_vdmx_output_chain: {
     bytes: 1438,
     fingerprint: "a7b306156c22d58baea5996f1b862dc632c71649da2ff0897fd1b4f59ed1e85b",
@@ -1865,6 +1877,10 @@ export const TOOL_METADATA: Record<string, GeneratedToolMetadataEntry> = {
   search_touchdesigner_knowledge: {
     bytes: 2745,
     fingerprint: "581f958de1f77e9024b6357da9f77ff7c0cf0654858182ac5274f7a8fbe98882",
+  },
+  select_toolset: {
+    bytes: 2606,
+    fingerprint: "3cf52cebde225b8c8dd19165de515cc9610fdac905a51d5f6ddd9ad00f00e30b",
   },
   serialize_network: {
     bytes: 4011,
