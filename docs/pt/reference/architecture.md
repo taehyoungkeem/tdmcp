@@ -82,6 +82,13 @@ depois continuam sujeitas ao schema original, à aprovação por tool e aos gate
 ambiente. `TDMCP_RAW_PYTHON=off` é autoritativo. A seleção não chama a tool nem
 cria um proxy genérico.
 
+Nota de compatibilidade: `run_macro_script` mantém o campo legado
+`allowRawPython` e a descrição MCP inalterada para preservar o contrato imutável
+das 497 tools. Em runtime, o texto legado não concede autorização: alvos de código
+cru e destrutivos ficam sempre bloqueados, independentemente desse campo ou do
+contexto do servidor; só handlers ativos na mesma sessão, com entrada válida, não
+crus e não destrutivos podem rodar.
+
 O SDK fixado não informa se o cliente realmente fez refresh. Por isso,
 `client_refresh_required: true` é uma dica, não uma confirmação. Se um cliente não
 reagir a `tools/list_changed`, escolha um perfil estático como `build`, desligue o

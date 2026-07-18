@@ -1,4 +1,4 @@
-import { TOOL_DISCOVERY_OVERRIDES } from "./overrides.js";
+import { effectiveToolDescription, TOOL_DISCOVERY_OVERRIDES } from "./overrides.js";
 import {
   BUILD_PROFILE_TOOL_NAMES,
   CORE_PROFILE_TOOL_NAMES,
@@ -238,7 +238,9 @@ function indexRegistration(registration: CapturedToolRegistration): IndexedCatal
     throw new Error(`Missing generated metadata for ${registration.name}`);
   }
 
-  const summary = displaySummary(registration.description);
+  const summary = displaySummary(
+    effectiveToolDescription(registration.name, registration.description),
+  );
   const aliases = override?.aliases.map(normalizeDiscoveryText).filter(Boolean) ?? [];
   const tags = override?.tags.map(normalizeDiscoveryText).filter(Boolean) ?? [];
   const readOnly = registration.annotations?.readOnlyHint ?? false;

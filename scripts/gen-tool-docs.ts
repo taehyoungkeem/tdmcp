@@ -20,6 +20,7 @@ import { layer1Registrars } from "../src/tools/layer1/index.js";
 import { layer2Registrars } from "../src/tools/layer2/index.js";
 import { layer3Registrars } from "../src/tools/layer3/index.js";
 import { libraryRegistrars } from "../src/tools/library/index.js";
+import { effectiveToolDescription } from "../src/tools/toolsets/overrides.js";
 import type { ToolContext, ToolRegistrar } from "../src/tools/types.js";
 import { utilRegistrars } from "../src/tools/util/index.js";
 import { vaultRegistrars } from "../src/tools/vault/index.js";
@@ -156,7 +157,8 @@ function renderGroup(group: ToolGroup): string {
   const lines: string[] = [`## ${group.heading}`, "", group.blurb, ""];
   for (const tool of group.tools) {
     lines.push(`### \`${tool.name}\`${badges(tool)}`, "");
-    if (tool.description) lines.push(oneLine(tool.description), "");
+    const description = effectiveToolDescription(tool.name, tool.description);
+    if (description) lines.push(oneLine(description), "");
     lines.push(renderParams(tool), "");
   }
   return lines.join("\n");

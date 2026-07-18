@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +37,25 @@ const docs = {
   architecturePt: read("docs/pt/reference/architecture.md"),
   deployment: read("docs/DEPLOYMENT.md"),
 };
+
+const effectiveMacroDescription =
+  "Replay a `MacroRecord` through same-session active safe handlers; raw-code and destructive targets are always blocked, and the legacy `allowRawPython` field is accepted only for input-schema compatibility.";
+
+function generateToolReference(): string {
+  const tsxBin = process.platform === "win32" ? "tsx.cmd" : "tsx";
+  const result = spawnSync(
+    join(root, "node_modules", ".bin", tsxBin),
+    ["scripts/gen-tool-docs.ts"],
+    {
+      cwd: root,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  expect(result.error).toBeUndefined();
+  expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  return read("docs/reference/tools.md");
+}
 
 function expectInventory(text: string): void {
   expect(text).toContain(String(legacyCount));
@@ -107,6 +127,40 @@ describe("dynamic toolset documentation parity", () => {
       expect(text).toMatch(/destructive|destrutiv/i);
       expectBothRecoveryRecipes(text);
     }
+  });
+
+  it("documents the frozen macro contract and authoritative fail-closed runtime in both languages", () => {
+    expect(docs.architecture).toMatch(
+      /run_macro_script[\s\S]{0,240}legacy[\s\S]{0,240}allowRawPython[\s\S]{0,240}MCP description[\s\S]{0,120}unchanged/iu,
+    );
+    expect(docs.architecture).toMatch(
+      /raw-code[\s\S]{0,120}destructive[\s\S]{0,160}always blocked[\s\S]{0,200}(?:field|server context)/iu,
+    );
+    expect(docs.architecturePt).toMatch(
+      /run_macro_script[\s\S]{0,240}(?:legado|legada)[\s\S]{0,240}allowRawPython[\s\S]{0,240}descri[cç][aã]o MCP[\s\S]{0,120}(?:inalterada|sem altera[cç][oõ]es)/iu,
+    );
+    expect(docs.architecturePt).toMatch(
+      /c[oó]digo\s+cru[\s\S]{0,120}destrutiv[\s\S]{0,160}sempre bloquead[\s\S]{0,200}(?:campo|contexto)/iu,
+    );
+  });
+
+  it("generates one effective macro description instead of the frozen misleading text", () => {
+    const toolsReference = generateToolReference();
+    const macroSection = toolsReference.split("### `run_macro_script`")[1]?.split("\n## ", 1)[0];
+    expect(macroSection).toContain(effectiveMacroDescription);
+    expect(macroSection).not.toContain("allowRawPython` to opt-in");
+    expect(macroSection?.match(/Replay a `MacroRecord`/gu)).toHaveLength(1);
+  });
+
+  it("states that RAG apply-card registration uses parsed context", () => {
+    const configSource = read("src/utils/config.ts");
+    expect(configSource).toContain("registration uses parsed `ctx.ragApplyCard`");
+    expect(configSource).not.toContain(
+      "tool registration runs BEFORE the parsed config is available",
+    );
+    expect(configSource).not.toContain(
+      "tool index and CLI registry still read `process.env.TDMCP_RAG_APPLY_CARD`",
+    );
   });
 
   it("keeps MCPB, registry, and Smithery choices/defaults in parity", () => {

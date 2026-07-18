@@ -78,6 +78,12 @@ opt-in, then still pass the original schema, per-tool approval, and environment
 gates. `TDMCP_RAW_PYTHON=off` is authoritative. Dynamic selection does not invoke
 a tool and does not introduce a generic proxy.
 
+Compatibility note: `run_macro_script` keeps its legacy `allowRawPython` input
+field and MCP description unchanged to preserve the immutable 497-tool contract.
+At runtime, the legacy wording is not an authorization opt-in: nested raw-code and
+destructive targets are always blocked regardless of that field or server context;
+only same-session active, input-valid, non-raw, non-destructive handlers can run.
+
 The pinned SDK cannot report whether a client actually refreshed. Therefore
 `client_refresh_required: true` is a hint, not an acknowledgment. If a client
 does not react to `tools/list_changed`, choose a static profile such as `build`,

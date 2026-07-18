@@ -1,10 +1,15 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer, type RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildToolContext } from "../../src/server/context.js";
+import { createTdmcpServer } from "../../src/server/tdmcpServer.js";
 import { registerAllTools } from "../../src/tools/index.js";
 import { normalizeDiscoveryText, ToolCatalog } from "../../src/tools/toolsets/catalog.js";
+import { fingerprintTool } from "../../src/tools/toolsets/metadata.js";
 import { TOOL_DISCOVERY_OVERRIDES } from "../../src/tools/toolsets/overrides.js";
 import { DYNAMIC_MANAGEMENT_TOOL_NAMES } from "../../src/tools/toolsets/profiles.js";
+import { TOOL_METADATA } from "../../src/tools/toolsets/toolMetadata.generated.js";
 import type {
   CapturedToolRegistration,
   ToolGroup,
@@ -12,6 +17,7 @@ import type {
 } from "../../src/tools/toolsets/types.js";
 import { loadConfig } from "../../src/utils/config.js";
 import { silentLogger } from "../../src/utils/logger.js";
+import baseline from "../fixtures/tool-contract-baseline.json" with { type: "json" };
 import approvedMembership from "../fixtures/tool-profile-membership.json" with { type: "json" };
 
 const ORDINARY_PRESETS = ["core", "inspect", "build", "show", "library"] as const;
@@ -74,6 +80,34 @@ function captureRegisteredTools(dynamic: boolean): CapturedToolRegistration[] {
   return captured;
 }
 
+async function assembledRunMacroFingerprint(dynamic: boolean): Promise<string> {
+  const server = createTdmcpServer(
+    loadConfig({
+      TDMCP_TOOL_PROFILE: "full",
+      TDMCP_DYNAMIC_TOOLSETS: dynamic ? "on" : "off",
+      TDMCP_RAW_PYTHON: "on",
+      TDMCP_EVENTS: "off",
+      TDMCP_RAG_ENABLED: "0",
+      TDMCP_PROJECT_RAG_ENABLED: "0",
+      TDMCP_RAG_APPLY_CARD: "off",
+      TDMCP_LOG_LEVEL: "silent",
+    }),
+    { logger: silentLogger },
+  );
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "run-macro-fingerprint-test", version: "0.0.0" });
+  try {
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const tool = (await client.listTools()).tools.find(
+      (entry) => entry.name === "run_macro_script",
+    );
+    expect(tool).toBeDefined();
+    return fingerprintTool(tool);
+  } finally {
+    await Promise.allSettled([client.close(), server.close()]);
+  }
+}
+
 beforeAll(() => {
   legacyCaptured = captureRegisteredTools(false);
   dynamicCaptured = captureRegisteredTools(true);
@@ -87,6 +121,24 @@ describe("normalizeDiscoveryText", () => {
 });
 
 describe("ToolCatalog", () => {
+  it("keeps the frozen run_macro_script fingerprint in static and dynamic metadata", async () => {
+    const expected = baseline.fingerprints.run_macro_script;
+    expect(expected).toBe("e72c411e3016122a939aa0961297d2acd0fa4a18f2d0af68594a8779b87caee1");
+    expect(TOOL_METADATA.run_macro_script?.fingerprint).toBe(expected);
+    expect(await assembledRunMacroFingerprint(false)).toBe(expected);
+    expect(await assembledRunMacroFingerprint(true)).toBe(expected);
+  });
+
+  it("describes effective fail-closed macro replay without presenting a legacy opt-in", () => {
+    const result = catalog.discover({ query: "run_macro_script", risk: "any" });
+    expect(result.candidates[0]).toMatchObject({
+      name: "run_macro_script",
+      summary:
+        "Replay a `MacroRecord` through same-session active safe handlers; raw-code and destructive targets are always blocked, and the legacy `allowRawPython` field is accepted only for input-schema compatibility.",
+    });
+    expect(result.candidates[0]?.summary).not.toMatch(/opt[- ]?in/iu);
+  });
+
   it("preserves the immutable 497 legacy surface and exact 501 dynamic extension", () => {
     const legacyNames = new Set(legacyCaptured.map((entry) => entry.name));
     const dynamicNames = new Set(dynamicCaptured.map((entry) => entry.name));

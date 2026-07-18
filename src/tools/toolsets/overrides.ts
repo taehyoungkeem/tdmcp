@@ -1,7 +1,11 @@
 export interface ToolDiscoveryOverride {
   aliases: readonly string[];
   tags: readonly string[];
+  summary?: string;
 }
+
+export const RUN_MACRO_SCRIPT_EFFECTIVE_DESCRIPTION =
+  "Replay a `MacroRecord` through same-session active safe handlers; raw-code and destructive targets are always blocked, and the legacy `allowRawPython` field is accepted only for input-schema compatibility.";
 
 export const TOOL_DISCOVERY_OVERRIDES: Readonly<Record<string, ToolDiscoveryOverride>> = {
   get_td_info: {
@@ -104,4 +108,19 @@ export const TOOL_DISCOVERY_OVERRIDES: Readonly<Record<string, ToolDiscoveryOver
     aliases: ["파이썬 실행", "raw python"],
     tags: ["python", "raw-code"],
   },
+  run_macro_script: {
+    aliases: [],
+    tags: [],
+    summary: RUN_MACRO_SCRIPT_EFFECTIVE_DESCRIPTION,
+  },
 };
+
+export function effectiveToolDescription(
+  name: string,
+  fallback: string | undefined,
+): string | undefined {
+  const override = Object.hasOwn(TOOL_DISCOVERY_OVERRIDES, name)
+    ? TOOL_DISCOVERY_OVERRIDES[name]
+    : undefined;
+  return override?.summary ?? fallback;
+}

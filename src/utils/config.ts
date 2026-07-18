@@ -306,11 +306,8 @@ export const ConfigSchema = z.object({
   ragEuropeanaKey: z.string().optional(),
   /**
    * Gate the `apply_creative_card` MCP tool / CLI verb. Off by default so the
-   * inspiration→execution loop only registers when explicitly enabled. Note:
-   * tool registration runs BEFORE the parsed config is available, so the tool
-   * index and CLI registry still read `process.env.TDMCP_RAG_APPLY_CARD` via the
-   * shared `isRagFeatureFlagEnabled` helper. This field is the source of truth
-   * everywhere else.
+   * inspiration→execution loop only registers when explicitly enabled. MCP tool
+   * registration uses parsed `ctx.ragApplyCard`; this field is the source of truth.
    */
   ragApplyCard: RagApplyCardSchema,
   /** Auto-inject creative cards into `tdmcp ask` prompts (mirrors --with-creative). */
