@@ -54,6 +54,57 @@ cada tarefa. Veja a lista completa e sempre atualizada na
 Um grupo separado de [tools de vault](/reference/tools#obsidian-vault) (em inglês)
 faz a ponte entre um vault do Obsidian e o TouchDesigner.
 
+## Toolsets dinâmicos
+
+Os padrões compatíveis do pacote continuam `TDMCP_TOOL_PROFILE=full`,
+`TDMCP_DYNAMIC_TOOLSETS=off`, `TDMCP_TOOL_MAX_ACTIVE=120` e
+`TDMCP_TOOL_METADATA_BUDGET_KB=256`. Existem oito perfis de inicialização:
+`full`, `safe`, `directory`, `core`, `inspect`, `build`, `show` e `library`.
+O `full` estático preserva as 497 tools legadas. O `full` dinâmico adiciona quatro
+tools de gestão, totalizando 501, mas é apenas um estado de compatibilidade de
+inicialização/reset e não pode ser selecionado a partir de uma sessão compacta. O perfil `directory` tem 15 tools estáticas / 22 dinâmicas.
+
+Cada chamada de `createTdmcpServer` possui um `ToolCatalog` e um
+`ToolsetManager`. A factory HTTP existente cria um novo servidor e manager para
+cada sessão MCP por HTTP, sem vazamento de estado entre sessões. O fluxo nativo é:
+
+```text
+discover_tools -> validar política e budgets
+               -> batch do lifecycle de RegisteredTool
+               -> uma tools/list_changed
+               -> tools e handlers originais após refresh
+```
+
+O core protegido sempre inclui `discover_tools`, `select_toolset`,
+`get_active_toolset` e `reset_toolset`. Presets são seguros por construção. Tools
+de código cru ou destrutivas exigem o nome exato e opt-in explícito de risco, e
+depois continuam sujeitas ao schema original, à aprovação por tool e aos gates de
+ambiente. `TDMCP_RAW_PYTHON=off` é autoritativo. A seleção não chama a tool nem
+cria um proxy genérico.
+
+O SDK fixado não informa se o cliente realmente fez refresh. Por isso,
+`client_refresh_required: true` é uma dica, não uma confirmação. Se um cliente não
+reagir a `tools/list_changed`, escolha um perfil estático como `build`, desligue o
+modo dinâmico e reinicie:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "build"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+Para restaurar o comportamento legado completo, use `full`, desligue o modo
+dinâmico e reinicie:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "full"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+Nenhuma receita de recuperação apaga código ou altera configurações de aprovação
+por tool.
+
 ## O ciclo criar → verificar → visualizar
 
 Toda construção de alto nível segue o mesmo ciclo, para que a IA veja e corrija o

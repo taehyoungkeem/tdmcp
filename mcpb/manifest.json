@@ -41,7 +41,10 @@
         "TDMCP_TD_PORT": "${user_config.TDMCP_TD_PORT}",
         "TDMCP_BRIDGE_TOKEN": "${user_config.TDMCP_BRIDGE_TOKEN}",
         "TDMCP_RAW_PYTHON": "${user_config.TDMCP_RAW_PYTHON}",
-        "TDMCP_TOOL_PROFILE": "${user_config.TDMCP_TOOL_PROFILE}"
+        "TDMCP_TOOL_PROFILE": "${user_config.TDMCP_TOOL_PROFILE}",
+        "TDMCP_DYNAMIC_TOOLSETS": "${user_config.TDMCP_DYNAMIC_TOOLSETS}",
+        "TDMCP_TOOL_MAX_ACTIVE": "${user_config.TDMCP_TOOL_MAX_ACTIVE}",
+        "TDMCP_TOOL_METADATA_BUDGET_KB": "${user_config.TDMCP_TOOL_METADATA_BUDGET_KB}"
       }
     }
   },
@@ -80,9 +83,34 @@
     "TDMCP_TOOL_PROFILE": {
       "type": "string",
       "title": "Tool profile",
-      "description": "Use full for all tools, safe to hide destructive/raw-code tools, or directory for a compact registry-facing surface.",
+      "description": "Tool exposure profile: full, safe, directory, core, inspect, build, show, or library. The package-compatible default is full.",
       "required": false,
       "default": "full"
+    },
+    "TDMCP_DYNAMIC_TOOLSETS": {
+      "type": "string",
+      "title": "Dynamic toolsets",
+      "description": "Set to on for session-local discovery and activation, or off for a fixed startup profile.",
+      "required": false,
+      "default": "off"
+    },
+    "TDMCP_TOOL_MAX_ACTIVE": {
+      "type": "number",
+      "title": "Dynamic active-tool limit",
+      "description": "Maximum active tools in an ordinary dynamic selection.",
+      "required": false,
+      "default": 120,
+      "min": 1,
+      "max": 501
+    },
+    "TDMCP_TOOL_METADATA_BUDGET_KB": {
+      "type": "number",
+      "title": "Dynamic metadata budget (KiB)",
+      "description": "Maximum serialized tool metadata in an ordinary dynamic selection, in KiB.",
+      "required": false,
+      "default": 256,
+      "min": 1,
+      "max": 4096
     }
   }
 }

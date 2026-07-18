@@ -32,6 +32,8 @@
   "securityNotes": [
     "Secrets are loaded from explicit environment/config fields and redacted before diagnostic printing.",
     "Archive extraction validates paths and rejects traversal or symlink entries before unpacking.",
-    "Raw Python tools can be disabled with TDMCP_RAW_PYTHON=off, hidden with TDMCP_TOOL_PROFILE=safe, or excluded from the compact TDMCP_TOOL_PROFILE=directory surface."
+    "Dynamic toolset presets are safe by construction: they do not activate raw-code or destructive tools.",
+    "A risky dynamic selection requires the exact tool name, include_risky: true, and all existing per-tool approval and environment gates.",
+    "The TDMCP_RAW_PYTHON=off environment gate remains authoritative even after explicit risky opt-in."
   ]
 }

@@ -148,9 +148,8 @@ the [prompt cookbook](https://pantani.github.io/tdmcp/guide/prompt-cookbook).
 
 ## What you can do
 
-**378 tools** across three layers, plus foundation primitives, CLI automation,
-library/packaging, AI session memory and
-Obsidian vault integrations — from one-line artist generators
+**497 legacy tools** across three layers, plus foundation primitives, CLI automation,
+library/packaging, AI session memory and Obsidian vault integrations — from one-line artist generators
 (`create_feedback_network`, `create_audio_reactive`, `create_particle_system`,
 `create_generative_art`, …) to building blocks (`create_control_panel`,
 `animate_parameter`, `create_external_io` for OSC/MIDI/DMX/NDI, …) down to
@@ -159,6 +158,56 @@ a control panel you can tweak, preset, or map to a controller. See the full,
 always-current
 [tools reference](https://pantani.github.io/tdmcp/reference/tools) and the
 [recipe gallery](https://pantani.github.io/tdmcp/guide/recipes).
+
+## Dynamic toolsets
+
+The package remains backward-compatible: `TDMCP_TOOL_PROFILE=full`,
+`TDMCP_DYNAMIC_TOOLSETS=off`, `TDMCP_TOOL_MAX_ACTIVE=120`, and
+`TDMCP_TOOL_METADATA_BUDGET_KB=256` are the defaults. Static `full` exposes the
+same 497 legacy tools. Turning dynamic mode on adds four management tools, so a
+dynamic `full` startup/reset surface contains 501 tools. The `directory` profile contains static 15 / dynamic 22 tools. Dynamic `full` is a startup/reset compatibility state and is not selectable from a compact session.
+
+For a personal compact Codex connection, start with the protected 17-tool core:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "core"
+TDMCP_DYNAMIC_TOOLSETS = "on"
+```
+
+The four native MCP controls keep original tool names, schemas, annotations, and
+approval boundaries intact:
+
+- `discover_tools` searches the complete local catalog deterministically in
+  English or Korean without a network call or model.
+- `select_toolset` activates a safe preset or an explicit list for this session.
+- `get_active_toolset` reports the exact active names, profile, and budgets.
+- `reset_toolset` restores the session's startup profile atomically.
+
+Presets never activate raw-code or destructive tools. A risky tool requires its
+exact name with `include_risky: true`, then still passes its original per-tool
+approval and environment gates; `TDMCP_RAW_PYTHON=off` remains authoritative.
+After a transition, `client_refresh_required: true` is a hint, not an acknowledgment that the client refreshed its visible tool list.
+
+If a client does not react to `tools/list_changed`, choose a static profile such
+as `build`, turn dynamic mode off, and restart that client/server process:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "build"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+To restore the legacy full surface, use `full`, turn dynamic mode off, and
+restart:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "full"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+Neither recovery recipe deletes code or changes any per-tool approval setting.
 
 ## Optional: Creative RAG
 

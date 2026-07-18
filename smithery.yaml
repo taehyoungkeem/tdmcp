@@ -35,12 +35,31 @@ startCommand:
           (execute_python_script, exec_node_method) for restricted setups.
       toolProfile:
         type: string
-        enum: ["full", "safe", "directory"]
+        enum: ["full", "safe", "directory", "core", "inspect", "build", "show", "library"]
         default: "full"
         description: >-
           Tool exposure profile. Local Smithery installs default to the complete
-          runtime; use safe for autonomous clients or directory only for compact
-          registry inspection.
+          runtime; use a compact task-oriented profile when the client needs a
+          smaller surface.
+      dynamicToolsets:
+        type: string
+        enum: ["off", "on"]
+        default: "off"
+        description: >-
+          Enable session-local discovery and activation. Leave off for a fixed
+          startup profile or a client that does not refresh tools/list_changed.
+      toolMaxActive:
+        type: integer
+        default: 120
+        minimum: 1
+        maximum: 501
+        description: Maximum active tools in an ordinary dynamic selection.
+      toolMetadataBudgetKb:
+        type: integer
+        default: 256
+        minimum: 1
+        maximum: 4096
+        description: Maximum dynamic tool metadata, in KiB.
       vaultPath:
         type: string
         description: >-
@@ -58,6 +77,9 @@ startCommand:
         ...(config.tdPort && { TDMCP_TD_PORT: String(config.tdPort) }),
         ...(config.rawPython && { TDMCP_RAW_PYTHON: config.rawPython }),
         ...(config.toolProfile && { TDMCP_TOOL_PROFILE: config.toolProfile }),
+        ...(config.dynamicToolsets && { TDMCP_DYNAMIC_TOOLSETS: config.dynamicToolsets }),
+        ...(config.toolMaxActive && { TDMCP_TOOL_MAX_ACTIVE: String(config.toolMaxActive) }),
+        ...(config.toolMetadataBudgetKb && { TDMCP_TOOL_METADATA_BUDGET_KB: String(config.toolMetadataBudgetKb) }),
         ...(config.bridgeToken && { TDMCP_BRIDGE_TOKEN: config.bridgeToken }),
         ...(config.vaultPath && { TDMCP_VAULT_PATH: config.vaultPath })
       }
@@ -67,3 +89,6 @@ startCommand:
     tdPort: 9980
     rawPython: "on"
     toolProfile: "full"
+    dynamicToolsets: "off"
+    toolMaxActive: 120
+    toolMetadataBudgetKb: 256

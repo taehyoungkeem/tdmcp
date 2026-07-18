@@ -19,13 +19,50 @@ config stay simple. Every variable is optional and has a sensible default.
 | `TDMCP_HTTP_PORT` | `3939` | Port for the HTTP transport (when `TDMCP_TRANSPORT=http`). |
 | `TDMCP_EVENTS` | `on` | Subscribe to TD WebSocket events and forward them as MCP logging notifications (`on`/`off`). Events are disabled automatically when `TDMCP_BRIDGE_TOKEN` is set until the bridge exposes an authenticated WebSocket handshake. |
 | `TDMCP_RAW_PYTHON` | `on` | Whether to expose client-authored raw-Python tools, including persistent Script callbacks. Set to `off` to lock them out for restricted setups. This removes only client-authored-code tools — many higher-level tools still send their own *templated* Python to the bridge, so `off` is **not** "no code runs in TD". The bridge keeps arbitrary-code endpoints disabled unless `TDMCP_BRIDGE_ALLOW_EXEC=1` is explicitly set; a token authenticates but does not authorize exec by itself. |
-| `TDMCP_TOOL_PROFILE` | `full` | Tool exposure profile. `full` registers every tool; `safe` hides destructive/raw-code tools, including raw Python, node deletion, DAT rewrites, checkpoint/component/package writes and preview-asset writes — a strict superset of `TDMCP_RAW_PYTHON=off`; `directory` exposes a compact build/inspect surface for MCP directories and hosted scanners. Use `safe` for an autonomous in-TD agent (e.g. dotsimulate's LOPs MCP Client). Default `full` keeps existing clients unchanged. |
+| `TDMCP_TOOL_PROFILE` | `full` | Tool exposure profile: `full`, `safe`, `directory`, `core`, `inspect`, `build`, `show`, or `library`. `full` preserves the complete legacy surface; `safe` hides destructive/raw-code tools; `directory` is the compact registry surface; the remaining profiles are task-oriented compact surfaces. |
+| `TDMCP_DYNAMIC_TOOLSETS` | `off` | Enables the four session-local discovery/selection controls when set to `on`. The package default stays static for existing clients. |
+| `TDMCP_TOOL_MAX_ACTIVE` | `120` | Maximum active tools in an ordinary dynamic selection (`1..501`). Startup/reset compatibility states for a session that began in legacy `full` or `safe` are exempt. |
+| `TDMCP_TOOL_METADATA_BUDGET_KB` | `256` | Maximum serialized metadata for an ordinary dynamic selection, in KiB (`1..4096`). The same legacy startup/reset exemption applies. |
 | `TDMCP_BRIDGE_TOKEN` | _(unset)_ | Optional shared bearer token. When set, the server sends it and the bridge requires it — set the **same** value in TouchDesigner's environment to turn auth on. |
 | `TDMCP_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` / `silent` (logged to stderr). |
 | `TDMCP_REQUEST_TIMEOUT_MS` | `10000` | Per-request timeout to the bridge, in milliseconds. |
 | `TDMCP_CONFIG_FILE` | _(unset)_ | Optional JSON config file. Keys match the internal config names (`tdHost`, `tdPort`, `requestTimeoutMs`, etc.). |
 | `TDMCP_PROFILE` | _(unset)_ | Optional profile name inside the selected config file (`profiles.<name>`), whether that file is set with `TDMCP_CONFIG_FILE` or found through the default search paths. File base values load first, profile values override them, env vars override both. |
 | `TDMCP_VAULT_PATH` | _(unset)_ | Absolute path to an Obsidian vault (a folder of Markdown notes). Enables the [vault tools](/reference/tools#obsidian-vault); a leading `~/` is expanded. Leave unset to disable them. |
+
+## Dynamic toolset behavior and recovery
+
+The package defaults are `full` / dynamic `off` / 120 active tools / 256 KiB.
+Static `full` remains the 497-tool legacy surface; dynamic `full` contains those
+tools plus `discover_tools`, `select_toolset`, `get_active_toolset`, and
+`reset_toolset`, for 501 total. The `directory` inventory is static 15 / dynamic 22. Dynamic `full` exists only for startup/reset compatibility and cannot be selected from a compact session.
+
+Every `createTdmcpServer` call owns one manager. The existing HTTP server factory
+creates a separate server and manager for every MCP session. A transition follows
+`discover -> validate -> lifecycle batch -> one tools/list_changed`, while the
+protected core stays active. Presets are non-risky; raw-code or destructive tools
+require an exact explicit selection, risky opt-in, and all existing approval and
+environment gates. `TDMCP_RAW_PYTHON=off` always wins.
+
+`client_refresh_required: true` is a refresh hint, not an acknowledgment that the
+client updated its UI. If a client does not refresh, choose a fixed profile such
+as `build`, disable dynamic mode, and restart:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "build"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+To restore the legacy behavior, select `full`, disable dynamic mode, and restart:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "full"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+Neither recipe deletes code or changes per-tool approval settings.
 
 ## Local copilot (`tdmcp chat`)
 

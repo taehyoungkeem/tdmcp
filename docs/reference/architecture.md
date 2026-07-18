@@ -50,6 +50,56 @@ See the full, always-current list in the [Tools reference](/reference/tools).
 A separate group of [vault tools](/reference/tools#obsidian-vault) bridges an
 Obsidian vault and TouchDesigner.
 
+## Dynamic toolsets
+
+The package-compatible defaults remain `TDMCP_TOOL_PROFILE=full`,
+`TDMCP_DYNAMIC_TOOLSETS=off`, `TDMCP_TOOL_MAX_ACTIVE=120`, and
+`TDMCP_TOOL_METADATA_BUDGET_KB=256`. All eight startup profiles are supported:
+`full`, `safe`, `directory`, `core`, `inspect`, `build`, `show`, and `library`.
+Static `full` preserves the 497 legacy tools. Dynamic `full` adds the four
+management tools for 501 total, but it is a startup/reset compatibility state and
+is not selectable from a compact session. The `directory` profile is static 15 / dynamic 22.
+
+Each `createTdmcpServer` call owns one `ToolCatalog` and one `ToolsetManager`.
+The existing HTTP server factory creates a new server and manager for each HTTP
+MCP session, so enabled state never leaks between sessions. The native flow is:
+
+```text
+discover_tools -> validate policy and budgets
+               -> RegisteredTool lifecycle batch
+               -> one tools/list_changed
+               -> refreshed original tools and handlers
+```
+
+The protected core always includes `discover_tools`, `select_toolset`,
+`get_active_toolset`, and `reset_toolset`. Presets are safe by construction.
+Raw-code or destructive tools require the exact tool name and explicit risky
+opt-in, then still pass the original schema, per-tool approval, and environment
+gates. `TDMCP_RAW_PYTHON=off` is authoritative. Dynamic selection does not invoke
+a tool and does not introduce a generic proxy.
+
+The pinned SDK cannot report whether a client actually refreshed. Therefore
+`client_refresh_required: true` is a hint, not an acknowledgment. If a client
+does not react to `tools/list_changed`, choose a static profile such as `build`,
+disable dynamic mode, and restart:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "build"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+To restore the full legacy behavior, use `full`, disable dynamic mode, and
+restart:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "full"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+Neither recovery recipe deletes code or changes per-tool approval settings.
+
 ## The create → verify → preview loop
 
 Every high-level build follows the same loop so the AI can see and fix its own
@@ -179,6 +229,26 @@ the machine TD runs on:
   project via `http://127.0.0.1:<chat-port>/chat`.
 
 All of these are configured through [environment variables](/reference/environment).
+
+## Upstream provenance for this wave
+
+Reviewed source snapshots and published package artifacts are separate evidence.
+The exact Inspector and Conformance packages are development dependencies used by
+subprocess protocol probes; they are not server runtime dependencies.
+
+| Source | Reviewed source snapshot | Published artifact provenance | License evidence | Use in this wave |
+| --- | --- | --- | --- | --- |
+| `modelcontextprotocol/typescript-sdk` | v1 HEAD `69749aa5081ddfe675d36da8d96c7e27d83742b8` | `1.29.0` gitHead/tag `e12cbd7078db388152f6e839abdbe09ba01f3f32` | Published `1.29.0` artifact: MIT. The repository's Apache-2.0/MIT transition is outside that artifact. | Public `RegisteredTool` lifecycle and `tools/list_changed`; no source copy. |
+| `modelcontextprotocol/inspector` | checkout `ebd0550fecea0f398aae4997a9c8189727aec6e0` | CLI `0.22.0` gitHead/tag `0ba1b8d1d8852e2f179f5a1945895ef97a91459f` | Manifest: `SEE LICENSE IN LICENSE`; bundled `LICENSE` records the Apache-2.0/MIT transition; non-spec documentation may be CC-BY-4.0. | Exact dev dependency and subprocess contract probes. |
+| `modelcontextprotocol/conformance` | main `d1c0b9591786726d8a4bec05306eb103ba6894ff` | `0.2.0-alpha.9` gitHead `794dcab99ed1ef2b89607be9999574140ea5c96e`; no git tag; npm `alpha`, while npm stable `latest` is `0.1.16` | Manifest: MIT; bundled `LICENSE` records the Apache-2.0/MIT transition; non-spec documentation may be CC-BY-4.0. | Exact dev dependency and machine-readable protocol checks. |
+| `stacklok/toolhive` | `52ecebcca4eb5bda15b26fd0aac00bd2298bfc1c` | — | Apache-2.0 | Policy/exposure ideas only; no source copy. |
+| `openai/openai-agents-js` | `f7771c177e100a62a5b99f0d8cd5e97300eda6ea` | — | MIT | Deferred agent-runtime ideas; no runtime dependency or source copy. |
+| `lastmile-ai/mcp-agent` | `f62d849350816588b1c6294e7914bbe4d8b84072` | — | Apache-2.0 | Deferred workflow ideas; no Python rewrite or source copy. |
+
+FastMCP and PydanticAI were reference-only. No runtime source code is copied from
+ToolHive, OpenAI Agents JS, mcp-agent, FastMCP, or PydanticAI into tdmcp in this
+wave. When package manifest metadata and repository summaries differ, the bundled
+`LICENSE` wording is retained and both facts are reported rather than simplified.
 
 ## Known limitations
 

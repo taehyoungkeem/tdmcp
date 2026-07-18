@@ -19,13 +19,50 @@ do cliente MCP continuam simples. Toda variável é opcional e tem um padrão se
 | `TDMCP_HTTP_PORT` | `3939` | Porta do transporte HTTP (quando `TDMCP_TRANSPORT=http`). |
 | `TDMCP_EVENTS` | `on` | Assina os eventos por WebSocket do TD e os encaminha como notificações de log do MCP (`on`/`off`). Os eventos são desativados automaticamente quando `TDMCP_BRIDGE_TOKEN` está configurado, até existir um handshake WebSocket autenticado na ponte. |
 | `TDMCP_RAW_PYTHON` | `on` | Se expõe as tools Python escritas pelo cliente, incluindo callbacks persistentes de Script. Defina como `off` para trancá-las em configurações restritas. Isto remove apenas as tools de código escritas pelo cliente — muitas tools de nível superior ainda enviam seu próprio Python *templateado* para a ponte, então `off` **não** significa "nenhum código roda no TD". A ponte mantém os endpoints de código arbitrário desligados até `TDMCP_BRIDGE_ALLOW_EXEC=1` ser definido explicitamente; o token autentica, mas não autoriza exec sozinho. |
-| `TDMCP_TOOL_PROFILE` | `full` | Perfil de exposição de tools. `full` registra todas as tools; `safe` esconde tools destrutivas/de código cru, incluindo Python cru, deleção de nós, reescrita de DATs, writes de checkpoint/componente/pacote e writes de previews — um superconjunto estrito de `TDMCP_RAW_PYTHON=off`; `directory` expõe uma superfície compacta de build/inspeção para diretórios MCP e scanners hospedados. Use `safe` para um agente autônomo dentro do TD (ex.: o "MCP Client" do LOPs da dotsimulate). O padrão `full` mantém os clientes existentes inalterados. |
+| `TDMCP_TOOL_PROFILE` | `full` | Perfil de exposição: `full`, `safe`, `directory`, `core`, `inspect`, `build`, `show` ou `library`. `full` preserva a superfície legada completa; `safe` oculta tools destrutivas/de código cru; `directory` é a superfície compacta de registro; os demais são perfis compactos orientados a tarefas. |
+| `TDMCP_DYNAMIC_TOOLSETS` | `off` | Habilita os quatro controles de descoberta/seleção por sessão quando está em `on`. O padrão do pacote continua estático para clientes existentes. |
+| `TDMCP_TOOL_MAX_ACTIVE` | `120` | Máximo de tools ativas numa seleção dinâmica comum (`1..501`). Estados de compatibilidade de inicialização/reset de uma sessão iniciada em `full` ou `safe` legados ficam isentos. |
+| `TDMCP_TOOL_METADATA_BUDGET_KB` | `256` | Máximo de metadados serializados numa seleção dinâmica comum, em KiB (`1..4096`). Aplica-se a mesma isenção legada de inicialização/reset. |
 | `TDMCP_BRIDGE_TOKEN` | _(não definido)_ | Token bearer compartilhado opcional. Quando definido, o servidor o envia e a ponte o exige — defina o **mesmo** valor no ambiente do TouchDesigner para ligar a autenticação. |
 | `TDMCP_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` / `silent` (registrado no stderr). |
 | `TDMCP_REQUEST_TIMEOUT_MS` | `10000` | Timeout por requisição à ponte, em milissegundos. |
 | `TDMCP_CONFIG_FILE` | _(não definido)_ | Arquivo JSON de configuração opcional. As chaves usam os nomes internos (`tdHost`, `tdPort`, `requestTimeoutMs`, etc.). |
 | `TDMCP_PROFILE` | _(não definido)_ | Nome de perfil opcional dentro do arquivo de configuração selecionado (`profiles.<nome>`), seja ele definido por `TDMCP_CONFIG_FILE` ou encontrado pelos caminhos de busca padrão. O arquivo base carrega primeiro, o perfil sobrescreve, e as variáveis de ambiente vencem ambos. |
 | `TDMCP_VAULT_PATH` | _(não definido)_ | Caminho absoluto para um vault do Obsidian (uma pasta de notas Markdown). Habilita as [tools de vault](/reference/tools#obsidian-vault) (em inglês); um `~/` inicial é expandido. Deixe sem definir para desabilitá-las. |
+
+## Toolsets dinâmicos e recuperação
+
+Os padrões do pacote são `full` / dinâmico `off` / 120 tools / 256 KiB. O `full`
+estático mantém as 497 tools legadas; o `full` dinâmico soma `discover_tools`,
+`select_toolset`, `get_active_toolset` e `reset_toolset`, totalizando 501. O perfil `directory` tem 15 tools estáticas / 22 dinâmicas. O `full` dinâmico existe apenas para compatibilidade de inicialização/reset e não pode ser selecionado a partir de uma sessão compacta.
+
+Cada chamada de `createTdmcpServer` possui um manager. A factory HTTP existente
+cria outro servidor e manager para cada sessão MCP. A transição segue
+`discover -> validate -> lifecycle batch -> one tools/list_changed`, mantendo o
+core protegido. Presets não são arriscados; tools de código cru ou destrutivas
+exigem seleção exata, opt-in de risco e todos os gates existentes de aprovação e
+ambiente. `TDMCP_RAW_PYTHON=off` sempre prevalece.
+
+`client_refresh_required: true` é uma dica de refresh, não uma confirmação de que
+o cliente atualizou a UI. Se o cliente não fizer refresh, escolha um perfil fixo
+como `build`, desligue o modo dinâmico e reinicie:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "build"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+Para restaurar o comportamento legado, escolha `full`, desligue o modo dinâmico e
+reinicie:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "full"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+Nenhuma receita apaga código ou altera configurações de aprovação por tool.
 
 ## Copiloto local (`tdmcp chat`)
 

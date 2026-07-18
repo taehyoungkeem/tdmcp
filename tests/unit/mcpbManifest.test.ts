@@ -2,8 +2,13 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { TOOL_METADATA } from "../../src/tools/toolsets/toolMetadata.generated.js";
+import { ConfigSchema, ToolProfileSchema } from "../../src/utils/config.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const profileChoices = [...ToolProfileSchema.options];
+const packageDefaults = ConfigSchema.parse({});
+const generatedToolCount = Object.keys(TOOL_METADATA).length;
 
 function userConfigEnv(name: string): string {
   return `\${user_config.${name}}`;
@@ -15,7 +20,16 @@ describe("MCPB manifest safety controls", () => {
       server?: { mcp_config?: { env?: Record<string, string> } };
       user_config?: Record<
         string,
-        { type?: string; title?: string; default?: unknown; sensitive?: boolean }
+        {
+          type?: string;
+          title?: string;
+          description?: string;
+          default?: unknown;
+          sensitive?: boolean;
+          min?: number;
+          max?: number;
+          enum?: string[];
+        }
       >;
     };
 
@@ -23,6 +37,9 @@ describe("MCPB manifest safety controls", () => {
       TDMCP_BRIDGE_TOKEN: userConfigEnv("TDMCP_BRIDGE_TOKEN"),
       TDMCP_RAW_PYTHON: userConfigEnv("TDMCP_RAW_PYTHON"),
       TDMCP_TOOL_PROFILE: userConfigEnv("TDMCP_TOOL_PROFILE"),
+      TDMCP_DYNAMIC_TOOLSETS: userConfigEnv("TDMCP_DYNAMIC_TOOLSETS"),
+      TDMCP_TOOL_MAX_ACTIVE: userConfigEnv("TDMCP_TOOL_MAX_ACTIVE"),
+      TDMCP_TOOL_METADATA_BUDGET_KB: userConfigEnv("TDMCP_TOOL_METADATA_BUDGET_KB"),
     });
     expect(manifest.user_config?.TDMCP_BRIDGE_TOKEN).toMatchObject({
       type: "string",
@@ -38,7 +55,27 @@ describe("MCPB manifest safety controls", () => {
     });
     expect(manifest.user_config?.TDMCP_TOOL_PROFILE).toMatchObject({
       type: "string",
-      default: "full",
+      default: packageDefaults.toolProfile,
+    });
+    const profileConfig = manifest.user_config?.TDMCP_TOOL_PROFILE;
+    for (const profile of profileChoices) expect(profileConfig?.description).toContain(profile);
+    // MCPB manifest v0.3 does not support enum/choices for user_config strings.
+    expect(profileConfig?.enum).toBeUndefined();
+    expect(manifest.user_config?.TDMCP_DYNAMIC_TOOLSETS).toMatchObject({
+      type: "string",
+      default: packageDefaults.dynamicToolsets,
+    });
+    expect(manifest.user_config?.TDMCP_TOOL_MAX_ACTIVE).toMatchObject({
+      type: "number",
+      default: packageDefaults.toolMaxActive,
+      min: 1,
+      max: generatedToolCount,
+    });
+    expect(manifest.user_config?.TDMCP_TOOL_METADATA_BUDGET_KB).toMatchObject({
+      type: "number",
+      default: packageDefaults.toolMetadataBudgetKb,
+      min: 1,
+      max: 4096,
     });
   });
 
@@ -49,18 +86,33 @@ describe("MCPB manifest safety controls", () => {
           name?: string;
           default?: string;
           choices?: string[];
+          format?: string;
         }>;
       }>;
     };
     const variables = manifest.packages?.[0]?.environmentVariables ?? [];
-    const profile = variables.find((variable) => variable.name === "TDMCP_TOOL_PROFILE");
-    const rawPython = variables.find((variable) => variable.name === "TDMCP_RAW_PYTHON");
+    const byName = new Map(variables.map((variable) => [variable.name, variable]));
 
-    expect(profile).toMatchObject({
+    expect(byName.get("TDMCP_TOOL_PROFILE")).toMatchObject({
       default: "directory",
-      choices: ["full", "safe", "directory"],
+      choices: profileChoices,
     });
-    expect(rawPython).toMatchObject({ default: "off", choices: ["on", "off"] });
+    expect(byName.get("TDMCP_RAW_PYTHON")).toMatchObject({
+      default: "off",
+      choices: ["on", "off"],
+    });
+    expect(byName.get("TDMCP_DYNAMIC_TOOLSETS")).toMatchObject({
+      default: "off",
+      choices: ["on", "off"],
+    });
+    expect(byName.get("TDMCP_TOOL_MAX_ACTIVE")).toMatchObject({
+      default: String(packageDefaults.toolMaxActive),
+      format: "number",
+    });
+    expect(byName.get("TDMCP_TOOL_METADATA_BUDGET_KB")).toMatchObject({
+      default: String(packageDefaults.toolMetadataBudgetKb),
+      format: "number",
+    });
   });
 
   it("keeps registry container scans compact while local Docker stays complete", () => {

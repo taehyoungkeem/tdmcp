@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Compact dynamic toolsets and protocol verification** — added the four session-local
+  controls `discover_tools`, `select_toolset`, `get_active_toolset`, and
+  `reset_toolset`; deterministic bilingual offline discovery; HTTP session isolation;
+  configurable active-count and metadata budgets; and pinned MCP Inspector and MCP
+  Conformance gates for the built server.
 - **External-integration Wave 1** — five new artist-facing bridge/scaffold tools:
   - **`create_raytk_sdf_graph`** (Layer 1, CLI `raytk-sdf-graph`) builds a deeper
     RayTK SDF graph with optional secondary SDF, `simpleUnion`, `basicMat`,

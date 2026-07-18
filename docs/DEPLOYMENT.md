@@ -93,6 +93,46 @@ The manifest lives at `mcpb/manifest.json`. It declares a `node` server with
 `TDMCP_BRIDGE_TOKEN`, `TDMCP_RAW_PYTHON`, and `TDMCP_TOOL_PROFILE` via
 `user_config`, injected into the server env as `${user_config.*}`.
 
+### MCPB, Smithery, and MCP registry configuration
+
+All distribution manifests expose the eight profiles `full`, `safe`, `directory`,
+`core`, `inspect`, `build`, `show`, and `library`, plus dynamic mode and the
+120-tool / 256-KiB ordinary-selection limits. MCPB manifest v0.3 lists the profile
+values in its setting description (that schema has no supported string-enum field)
+and passes `TDMCP_DYNAMIC_TOOLSETS`, `TDMCP_TOOL_MAX_ACTIVE`, and
+`TDMCP_TOOL_METADATA_BUDGET_KB` through to the server. MCPB and Smithery keep the
+package defaults `full` / dynamic `off` / 120 / 256.
+
+The MCP registry manifest intentionally defaults to `directory`, raw Python `off`, and dynamic mode `off`, so its scanner receives the compact static surface. The `directory` inventory is static 15 / dynamic 22. A client that explicitly turns dynamic mode on receives the protected 22-tool union instead. This registry default is an introspection limitation, not a different package capability.
+
+The fixed legacy full surface contains 497 tools. Dynamic full adds only
+`discover_tools`, `select_toolset`, `get_active_toolset`, and `reset_toolset`, for
+501 total, and exists only as a startup/reset compatibility state. It is not a
+compact selection target. Dynamic presets do not include raw-code or destructive
+tools; explicit risky selection still requires the exact name,
+`include_risky: true`, and the existing approval/environment gates.
+
+`client_refresh_required: true` is a hint rather than an acknowledgment. For a
+client that does not refresh after `tools/list_changed`, choose a static profile
+such as `build`, disable dynamic mode, and restart:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "build"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+To restore the legacy full behavior, use `full`, disable dynamic mode, and
+restart:
+
+```toml
+[mcp_servers.tdmcp.env]
+TDMCP_TOOL_PROFILE = "full"
+TDMCP_DYNAMIC_TOOLSETS = "off"
+```
+
+Neither recipe deletes code or changes per-tool approval settings.
+
 ---
 
 ## 3. Publish to npm

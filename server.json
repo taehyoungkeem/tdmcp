@@ -18,14 +18,32 @@
         {
           "name": "TDMCP_TOOL_PROFILE",
           "default": "directory",
-          "choices": ["full", "safe", "directory"],
-          "description": "Tool exposure profile. Glama and MCP directory scanners use directory for a compact build/inspect surface; choose full for the complete installed runtime or safe to hide destructive/raw-code tools."
+          "choices": ["full", "safe", "directory", "core", "inspect", "build", "show", "library"],
+          "description": "Tool exposure profile. Registry scanners default to the compact static directory surface; all eight package profiles remain selectable."
         },
         {
           "name": "TDMCP_RAW_PYTHON",
           "default": "off",
           "choices": ["on", "off"],
           "description": "Keep client-authored Python escape-hatch tools hidden by default in registry scans; choose on only for a trusted local runtime."
+        },
+        {
+          "name": "TDMCP_DYNAMIC_TOOLSETS",
+          "default": "off",
+          "choices": ["on", "off"],
+          "description": "Registry scans remain static by default. Set on only for a client that refreshes tools/list_changed notifications."
+        },
+        {
+          "name": "TDMCP_TOOL_MAX_ACTIVE",
+          "default": "120",
+          "format": "number",
+          "description": "Maximum active tools in an ordinary dynamic selection (1..501)."
+        },
+        {
+          "name": "TDMCP_TOOL_METADATA_BUDGET_KB",
+          "default": "256",
+          "format": "number",
+          "description": "Maximum serialized metadata in an ordinary dynamic selection, in KiB (1..4096)."
         }
       ],
       "transport": {
