@@ -64,18 +64,31 @@ required notice. Prefer a local implementation of the pattern over copying code.
 
 | Source | License | Decision | Useful pattern |
 | --- | --- | --- | --- |
-| [modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk) `v1.x` | MIT / Apache-2.0 | Adopt public SDK lifecycle | `RegisteredTool` enable/disable state and `tools/list_changed` |
-| [modelcontextprotocol/inspector](https://github.com/modelcontextprotocol/inspector) | MIT | Add as pinned contract-test dependency | stdio/HTTP `tools/list` and `tools/call` CLI probes |
-| [modelcontextprotocol/conformance](https://github.com/modelcontextprotocol/conformance) | Apache-2.0 | Add as pinned protocol-test dependency | spec-referenced server scenarios and machine-readable results |
+| [modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk) `@modelcontextprotocol/sdk@1.29.0` | Published `1.29.0` artifact: MIT. The repository's Apache-2.0/MIT transition is outside that artifact. | Adopt public SDK lifecycle | `RegisteredTool` enable/disable state and `tools/list_changed` |
+| [modelcontextprotocol/inspector](https://github.com/modelcontextprotocol/inspector) `@modelcontextprotocol/inspector-cli@0.22.0` | Manifest: `SEE LICENSE IN LICENSE`; bundled `LICENSE` records the Apache-2.0/MIT transition. Non-spec documentation may be CC-BY-4.0. | Add as pinned contract-test dependency | stdio/HTTP `tools/list` and `tools/call` CLI probes |
+| [modelcontextprotocol/conformance](https://github.com/modelcontextprotocol/conformance) `@modelcontextprotocol/conformance@0.2.0-alpha.9` | Manifest: MIT; bundled `LICENSE` records the Apache-2.0/MIT transition. Non-spec documentation may be CC-BY-4.0. | Add as pinned protocol-test dependency | spec-referenced server scenarios and machine-readable results |
 | [stacklok/toolhive](https://github.com/stacklok/toolhive) | Apache-2.0 | Adapt ideas only | compact tool exposure, policy gates, local auditability |
 | [openai/openai-agents-js](https://github.com/openai/openai-agents-js) | MIT | Defer to a later agent-runtime wave | guardrails, sessions, tracing, human approval |
 | [lastmile-ai/mcp-agent](https://github.com/lastmile-ai/mcp-agent) | Apache-2.0 | Defer; do not rewrite the core in Python | workflow composition and durable execution |
 | [PrefectHQ/fastmcp](https://github.com/PrefectHQ/fastmcp) | Apache-2.0 | Reference only | ergonomic Python MCP composition |
 | [pydantic/pydantic-ai](https://github.com/pydantic/pydantic-ai) | MIT | Defer to an evaluation/agent wave | typed evals, approval, and observability |
 
-The official TypeScript SDK v2 branch is pre-alpha as of the research date. This
-wave stays on the production-recommended v1.x line and does not combine a protocol
-generation migration with toolset work.
+For the three MCP packages, the reviewed source snapshot and the published artifact
+provenance are distinct evidence:
+
+| Artifact | Reviewed source snapshot | Published artifact provenance |
+| --- | --- | --- |
+| TypeScript SDK | v1 HEAD `69749aa5081ddfe675d36da8d96c7e27d83742b8` | `1.29.0` gitHead/tag `e12cbd7078db388152f6e839abdbe09ba01f3f32` |
+| Inspector CLI | checkout `ebd0550fecea0f398aae4997a9c8189727aec6e0` | `0.22.0` gitHead/tag `0ba1b8d1d8852e2f179f5a1945895ef97a91459f` |
+| Conformance | main `d1c0b9591786726d8a4bec05306eb103ba6894ff` | `0.2.0-alpha.9` gitHead `794dcab99ed1ef2b89607be9999574140ea5c96e`; no git tag; npm `alpha`, while npm stable `latest` is `0.1.16` |
+
+No upstream implementation source is copied in this wave. Inspector and
+Conformance remain dev-only verifier dependencies; pinning the existing SDK runtime
+dependency does not add a new runtime package.
+
+The official TypeScript SDK v2 line is beta as of the verification date. This wave
+stays on the production-supported v1 line, pinned exactly to `1.29.0`, and does not
+combine a protocol generation migration with toolset work.
 
 ## Goals
 
@@ -95,7 +108,7 @@ generation migration with toolset work.
 
 ## Non-goals
 
-- Migrating to the TypeScript SDK v2 pre-alpha API.
+- Migrating to the TypeScript SDK v2 beta API.
 - Replacing the tdmcp server or local copilot with a Python framework.
 - Adding ToolHive, Docker, Kubernetes, an embedding model, or an external vector
   database as a runtime dependency.
@@ -350,6 +363,12 @@ Every transition follows this order:
    `tools/list_changed` notification.
 10. Return the transition report and a client refresh hint.
 
+The one-notification batch relies on verified `1.29.0` behavior in which registered
+tool lifecycle calls look up `server.sendToolListChanged` dynamically. That lookup
+is an implementation detail, not a public SDK contract, so the runtime dependency
+must remain pinned exactly to `1.29.0` and regression tests must cover the batching
+behavior.
+
 All validation occurs before state mutation. An error leaves the prior active set
 unchanged. The management tools and protected core cannot be removed. The pinned
 SDK's high-level notification method does not expose delivery acknowledgement, so
@@ -515,6 +534,18 @@ suite instead.
 The harness uses a local built package and does not download floating `latest`
 packages during CI.
 
+Inspector CLI `0.22.0` requires explicit CLI mode. The executable contract is:
+
+```text
+mcp-inspector-cli --cli node <dist/index.js> --method tools/list
+mcp-inspector-cli --cli node <dist/index.js> --method tools/call --tool-name get_active_toolset
+mcp-inspector-cli --cli node <dist/index.js> --method tools/call --tool-name discover_tools --tool-arg query=오디오_반응형
+mcp-inspector-cli --cli node <dist/index.js> --method resources/list
+mcp-inspector-cli --cli node <dist/index.js> --method prompts/list
+```
+
+The subprocess harness therefore uses the argument prefix `["--cli", process.execPath, server]`.
+
 ### MCP Conformance checks
 
 A pinned MCP Conformance version tests a temporary loopback HTTP server. Results
@@ -522,6 +553,16 @@ are stored as machine-readable artifacts and summarized by spec reference. Optio
 features that tdmcp does not advertise are not failures. Missing prerequisites for
 advertised behavior are failures, not silent skips. Any temporary expected-failure
 file must name the exact scenario, spec basis, owner, and removal condition.
+
+The verified published CLI contract is:
+
+```text
+conformance server --url http://127.0.0.1:<port>/mcp \
+  --suite active \
+  --spec-version 2025-11-25 \
+  --expected-failures tests/contract/conformance-expected-failures.yml \
+  --output-dir artifacts/mcp-conformance
+```
 
 ### Existing gates
 

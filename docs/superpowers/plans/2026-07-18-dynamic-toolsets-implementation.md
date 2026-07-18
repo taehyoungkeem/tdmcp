@@ -6,11 +6,12 @@
 
 **Architecture:** Keep the 497 existing tools as native MCP tools and capture their public `RegisteredTool` lifecycle handles in one registration pipeline. A deterministic `ToolCatalog` searches generated metadata plus curated aliases, while a session-owned `ToolsetManager` validates risk and byte budgets before atomically enabling the selected native tools and emitting one `tools/list_changed` notification.
 
-**Tech Stack:** Node.js 20.19+/22.x, TypeScript 6, Zod 4, `@modelcontextprotocol/sdk` v1.29.x, Vitest 4, Biome 2, MCP Inspector CLI 0.22.0, MCP Conformance 0.2.0-alpha.9, stateful Streamable HTTP.
+**Tech Stack:** Node.js 20.19+/22.x, TypeScript 6, Zod 4, `@modelcontextprotocol/sdk` 1.29.0, Vitest 4, Biome 2, MCP Inspector CLI 0.22.0, MCP Conformance 0.2.0-alpha.9, stateful Streamable HTTP.
 
 ## Global Constraints
 
-- Keep `@modelcontextprotocol/sdk` on the production v1.x line; do not migrate to the v2 pre-alpha API in this work.
+- Keep `@modelcontextprotocol/sdk` on the production-supported v1 line, pinned exactly to `1.29.0`; do not migrate to the v2 beta API in this work.
+- Treat one-notification batching as a verified `1.29.0` implementation detail: registered-tool lifecycle calls dynamically look up `server.sendToolListChanged`. Keep the exact pin and regression tests; do not treat that lookup as a public SDK contract.
 - Keep package defaults exactly `TDMCP_TOOL_PROFILE=full` and `TDMCP_DYNAMIC_TOOLSETS=off`.
 - Static legacy `full`, `safe`, and `directory` must remain exactly 497, 458, and 15 tools.
 - Dynamic `full`, `safe`, and `directory` must be exactly 501, 462, and 22 tools; dynamic `core` must be exactly 17 tools. Dynamic `directory` is the exact union of the legacy 15 names and the protected core.
@@ -24,7 +25,7 @@
 - Preserve the current stdio process-local state and the existing one-`McpServer`-per-HTTP-session isolation.
 - Pin Inspector and Conformance exactly; do not use floating verifier packages in tests or CI.
 - Before installing either verifier, resolve its exact lockfile change with scripts disabled and package-lock-only, review integrity, bundled licenses, and every new `hasInstallScript` package, and pass an allowlist-drift check.
-- Record the exact reviewed upstream commit SHAs and package-declared licenses in provenance documentation.
+- Record reviewed source SHAs separately from published artifact gitHead/tag provenance, and preserve package-manifest and bundled-license evidence without simplifying either.
 - Preserve upstream license notices for copied source. Prefer adapting public patterns through local code over copying implementations.
 - Do not modify, stage, delete, or commit the unrelated untracked `pnpm-lock.yaml`.
 - Do not publish, tag, push, or open a pull request as part of this plan.
@@ -1326,7 +1327,11 @@ Budget errors include requested count/bytes, limits, the ten largest contributor
 
 - [ ] **Step 6: Apply one rollback-safe lifecycle transaction**
 
-The v1 SDK lifecycle sends a notification per handle. Suppress only the high-level notifier during the batch, retain `enable`/`disable`, then send once:
+The verified `1.29.0` lifecycle sends a notification per handle and dynamically
+looks up `server.sendToolListChanged`. This one-notification technique is an
+implementation detail, not a public SDK contract, so keep the exact dependency pin
+and regression tests. Suppress only the high-level notifier during the batch,
+retain `enable`/`disable`, then send once:
 
 ```ts
 const originalNotify = server.sendToolListChanged.bind(server);
@@ -1967,14 +1972,14 @@ const env = {
 };
 ```
 
-Spawn the inspector with argument prefix `[process.execPath, server]`; `dist/index.js` is a Node entry point, not a standalone executable. Run these independent commands:
+Spawn the inspector with argument prefix `["--cli", process.execPath, server]`; `dist/index.js` is a Node entry point, not a standalone executable. Run these independent commands:
 
 ```text
-mcp-inspector-cli node <dist/index.js> --method tools/list
-mcp-inspector-cli node <dist/index.js> --method tools/call --tool-name get_active_toolset
-mcp-inspector-cli node <dist/index.js> --method tools/call --tool-name discover_tools --tool-arg query=오디오_반응형
-mcp-inspector-cli node <dist/index.js> --method resources/list
-mcp-inspector-cli node <dist/index.js> --method prompts/list
+mcp-inspector-cli --cli node <dist/index.js> --method tools/list
+mcp-inspector-cli --cli node <dist/index.js> --method tools/call --tool-name get_active_toolset
+mcp-inspector-cli --cli node <dist/index.js> --method tools/call --tool-name discover_tools --tool-arg query=오디오_반응형
+mcp-inspector-cli --cli node <dist/index.js> --method resources/list
+mcp-inspector-cli --cli node <dist/index.js> --method prompts/list
 ```
 
 Parse exactly one JSON payload from stdout; treat extra non-whitespace stdout as failure. Keep stderr for error reporting. Assert:
@@ -2137,10 +2142,12 @@ Create `scripts/test-mcp-conformance.mjs` that:
 2. Removes and recreates `artifacts/mcp-conformance` with `fs.rm(outputDir, { recursive: true, force: true })` and `fs.mkdir(outputDir, { recursive: true })`.
 3. Spawns `node dist/index.js` with HTTP transport, the selected port, `TDMCP_TOOL_PROFILE=core`, dynamic on, and silent logs.
 4. Polls `http://127.0.0.1:<port>/mcp` until it returns any HTTP response, with a 15-second readiness deadline.
-5. Spawns the local `node_modules/.bin/conformance` with:
+5. Spawns the local `node_modules/.bin/conformance`. The verified published
+   executable contract is shown below; pass the tokens after `conformance` as the
+   subprocess arguments:
 
 ```text
-server --url http://127.0.0.1:<port>/mcp
+conformance server --url http://127.0.0.1:<port>/mcp
 --suite active
 --spec-version 2025-11-25
 --expected-failures tests/contract/conformance-expected-failures.yml
@@ -2298,17 +2305,18 @@ Update `safeskill.manifest.json` to say presets are safe by construction and ris
 
 Under `CHANGELOG.md` Unreleased, record compact dynamic toolsets, bilingual offline discovery, session isolation, metadata budgets, and pinned Inspector/Conformance gates.
 
-Add a provenance table in `docs/reference/architecture.md` with the exact research snapshots:
+Add a provenance table in `docs/reference/architecture.md` that keeps reviewed
+source snapshots distinct from published artifact provenance:
 
 ```markdown
-| Source | Reviewed commit/version | License evidence | Use in this wave |
-| --- | --- | --- | --- |
-| `modelcontextprotocol/typescript-sdk` | `69749aa5081ddfe675d36da8d96c7e27d83742b8`, production v1 API | reviewed checkout `LICENSE`: MIT | Public `RegisteredTool` lifecycle and `tools/list_changed`; no source copy. |
-| `modelcontextprotocol/inspector` | `ebd0550fecea0f398aae4997a9c8189727aec6e0`, CLI `0.22.0` | package says `SEE LICENSE IN LICENSE`; bundled license records the MCP Apache-2.0/MIT transition | Exact dev dependency and subprocess contract probes. |
-| `modelcontextprotocol/conformance` | `d1c0b9591786726d8a4bec05306eb103ba6894ff`, `0.2.0-alpha.9` | package metadata says MIT; bundled license records the MCP Apache-2.0/MIT transition | Exact dev dependency and machine-readable protocol checks. |
-| `stacklok/toolhive` | `52ecebcca4eb5bda15b26fd0aac00bd2298bfc1c` | Apache-2.0 | Policy/exposure ideas only; no source copy. |
-| `openai/openai-agents-js` | `f7771c177e100a62a5b99f0d8cd5e97300eda6ea` | MIT | Deferred agent-runtime ideas; no runtime dependency or source copy. |
-| `lastmile-ai/mcp-agent` | `f62d849350816588b1c6294e7914bbe4d8b84072` | Apache-2.0 | Deferred workflow ideas; no Python rewrite or source copy. |
+| Source | Reviewed source snapshot | Published artifact provenance | License evidence | Use in this wave |
+| --- | --- | --- | --- | --- |
+| `modelcontextprotocol/typescript-sdk` | v1 HEAD `69749aa5081ddfe675d36da8d96c7e27d83742b8` | `1.29.0` gitHead/tag `e12cbd7078db388152f6e839abdbe09ba01f3f32` | Published `1.29.0` artifact: MIT. The repository's Apache-2.0/MIT transition is outside that artifact. | Public `RegisteredTool` lifecycle and `tools/list_changed`; no source copy. |
+| `modelcontextprotocol/inspector` | checkout `ebd0550fecea0f398aae4997a9c8189727aec6e0` | CLI `0.22.0` gitHead/tag `0ba1b8d1d8852e2f179f5a1945895ef97a91459f` | Manifest: `SEE LICENSE IN LICENSE`; bundled `LICENSE` records the Apache-2.0/MIT transition; non-spec documentation may be CC-BY-4.0. | Exact dev dependency and subprocess contract probes. |
+| `modelcontextprotocol/conformance` | main `d1c0b9591786726d8a4bec05306eb103ba6894ff` | `0.2.0-alpha.9` gitHead `794dcab99ed1ef2b89607be9999574140ea5c96e`; no git tag; npm `alpha`, while npm stable `latest` is `0.1.16` | Manifest: MIT; bundled `LICENSE` records the Apache-2.0/MIT transition; non-spec documentation may be CC-BY-4.0. | Exact dev dependency and machine-readable protocol checks. |
+| `stacklok/toolhive` | `52ecebcca4eb5bda15b26fd0aac00bd2298bfc1c` | — | Apache-2.0 | Policy/exposure ideas only; no source copy. |
+| `openai/openai-agents-js` | `f7771c177e100a62a5b99f0d8cd5e97300eda6ea` | — | MIT | Deferred agent-runtime ideas; no runtime dependency or source copy. |
+| `lastmile-ai/mcp-agent` | `f62d849350816588b1c6294e7914bbe4d8b84072` | — | Apache-2.0 | Deferred workflow ideas; no Python rewrite or source copy. |
 ```
 
 Also state that FastMCP and PydanticAI were reference-only, and that no ToolHive, OpenAI Agents JS, mcp-agent, FastMCP, or PydanticAI runtime code is copied into tdmcp in this wave. If installed-package license metadata differs from a repository README, preserve the bundled `LICENSE` wording and report both instead of simplifying it.
