@@ -58,3 +58,6 @@ vendor/shader-park/*.tox
 
 # Generated portable tool contract (npm run contract:gen)
 skill-contract.json
+
+# Local machine-readable MCP verifier output; CI uploads it as an artifact.
+artifacts/mcp-conformance/

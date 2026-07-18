@@ -55,6 +55,7 @@
     "format": "biome format --write .",
     "test": "node scripts/run-vitest.mjs run",
     "test:mcp:inspector": "node scripts/test-mcp-inspector.mjs",
+    "test:mcp:conformance": "node scripts/test-mcp-conformance.mjs",
     "test:coverage": "node scripts/run-vitest.mjs run --coverage",
     "test:watch": "node scripts/run-vitest.mjs",
     "coverage:harness": "node scripts/coverage-harness.mjs",
@@ -147,6 +148,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
     "@bottobot/td-mcp": "^2.8.0",
+    "@modelcontextprotocol/conformance": "0.2.0-alpha.9",
     "@modelcontextprotocol/inspector-cli": "0.22.0",
     "@types/node": "^25.9.1",
     "@vitest/coverage-v8": "^4.1.9",

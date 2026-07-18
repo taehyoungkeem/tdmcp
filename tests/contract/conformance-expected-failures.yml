@@ -1,0 +1,21 @@
+server:
+  - completion-complete
+  - tools-call-image
+  - tools-call-mixed-content
+  - tools-call-with-logging
+  - tools-call-with-progress
+  - tools-call-sampling
+  - tools-call-elicitation
+  - tools-call-audio
+  - tools-call-embedded-resource
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums
+  - resources-read-text
+  - resources-read-binary
+  - resources-templates-read
+  - resources-subscribe
+  - resources-unsubscribe
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image

@@ -217,6 +217,42 @@ jobs:
       - name: Test MCP Inspector contract
         run: npm run test:mcp:inspector
 
+  mcp-conformance:
+    name: MCP Conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: install-script-allowlist
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Import knowledge base
+        run: npm run import:bottobot
+
+      - name: Build
+        run: npm run build
+
+      - name: Test MCP Conformance
+        run: npm run test:mcp:conformance
+
+      - name: Upload MCP Conformance results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mcp-conformance-results
+          path: artifacts/mcp-conformance
+          if-no-files-found: error
+
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
@@ -231,6 +267,7 @@ jobs:
       - creative-rag-multilingual-smoke
       - coverage
       - mcp-inspector-contract
+      - mcp-conformance
     env:
       INSTALL_SCRIPT_ALLOWLIST: ${{ needs.install-script-allowlist.result }}
       UNIT_TESTS: ${{ needs.unit-tests.result }}
@@ -240,6 +277,7 @@ jobs:
       CREATIVE_RAG_SMOKE: ${{ needs.creative-rag-multilingual-smoke.result }}
       COVERAGE: ${{ needs.coverage.result }}
       MCP_INSPECTOR_CONTRACT: ${{ needs.mcp-inspector-contract.result }}
+      MCP_CONFORMANCE: ${{ needs.mcp-conformance.result }}
     steps:
       - name: Check required CI jobs
         run: |
@@ -253,7 +291,8 @@ jobs:
             "raw-exec-off-smoke=${RAW_EXEC_OFF_SMOKE}" \
             "creative-rag-multilingual-smoke=${CREATIVE_RAG_SMOKE}" \
             "coverage=${COVERAGE}" \
-            "mcp-inspector-contract=${MCP_INSPECTOR_CONTRACT}"
+            "mcp-inspector-contract=${MCP_INSPECTOR_CONTRACT}" \
+            "mcp-conformance=${MCP_CONFORMANCE}"
           do
             name="${item%%=*}"
             result="${item#*=}"

@@ -44,7 +44,10 @@ export function createTdmcpServer(
 
   const server = new McpServer(
     { name: "tdmcp", version: getVersion() },
-    { instructions: ctx.dynamicToolsets ? DYNAMIC_TOOLSET_INSTRUCTIONS : INSTRUCTIONS },
+    {
+      capabilities: { logging: {} },
+      instructions: ctx.dynamicToolsets ? DYNAMIC_TOOLSET_INSTRUCTIONS : INSTRUCTIONS,
+    },
   );
 
   // Wire the LLM shim now that the underlying Server exists. Sampling capability
