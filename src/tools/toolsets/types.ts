@@ -1,4 +1,7 @@
+import type { RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolProfile } from "../../utils/config.js";
+import type { ToolRegistrar } from "../types.js";
 
 export type ToolGroup =
   | "layer1"
@@ -14,6 +17,20 @@ export type ToolsetPreset = "core" | "inspect" | "build" | "show" | "library";
 export type SelectableToolsetPreset = ToolsetPreset | "safe" | "directory";
 export type ToolProfileState = ToolProfile | "custom";
 export type ToolRisk = "read_only" | "safe_mutation" | "destructive" | "raw_code";
+
+export interface ToolRegistrarGroup {
+  group: ToolGroup;
+  registrars: readonly ToolRegistrar[];
+}
+
+export interface CapturedToolRegistration {
+  name: string;
+  group: ToolGroup;
+  title?: string;
+  description?: string;
+  annotations?: ToolAnnotations;
+  handle: RegisteredTool;
+}
 
 export interface DiscoverToolsInput {
   query: string;

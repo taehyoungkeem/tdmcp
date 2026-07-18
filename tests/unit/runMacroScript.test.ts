@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { writeMacro } from "../../src/automation/macroSchema.js";
 import {
   __setHandlersForTests,
@@ -13,6 +14,31 @@ import {
 import type { ToolContext } from "../../src/tools/types.js";
 
 type Handler = (args: unknown) => Promise<CallToolResult> | CallToolResult;
+
+interface InjectedTarget {
+  handler: Handler;
+  inputSchema: z.ZodType;
+  annotations: { destructiveHint?: boolean };
+  rawCode: boolean;
+  isActive?: () => boolean;
+}
+
+function injectTargets(targets: Map<string, InjectedTarget>, ctx: ToolContext = baseCtx): void {
+  __setHandlersForTests(targets as unknown as Map<string, Handler>, ctx);
+}
+
+function safeTarget(
+  handler: Handler,
+  overrides: Partial<Omit<InjectedTarget, "handler">> = {},
+): InjectedTarget {
+  return {
+    handler,
+    inputSchema: z.object({}),
+    annotations: { destructiveHint: false },
+    rawCode: false,
+    ...overrides,
+  };
+}
 
 const baseCtx = {} as ToolContext;
 
@@ -50,6 +76,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   __setHandlersForTests(undefined);
+  __setHandlersForTests(undefined, baseCtx);
   if (prevDir === undefined) delete process.env.TDMCP_MACROS_DIR;
   else process.env.TDMCP_MACROS_DIR = prevDir;
 });
@@ -105,6 +132,117 @@ describe("runMacroScriptImpl", () => {
     expect(known).toHaveBeenCalledOnce();
   });
 
+  it("keeps a captured safe target inactive until the same session activates it", async () => {
+    const file = join(tmp, "active-safe.json");
+    await writeRecord(file, [{ tool: "create_audio_reactive", args: { level: 2 } }]);
+    let active = false;
+    const handler = vi.fn(
+      async () => ({ content: [{ type: "text", text: "ran" }] }) as CallToolResult,
+    );
+    const ctx = {
+      dynamicToolsets: true,
+      toolsets: {
+        getActive: () => ({
+          active_tools: active ? ["create_audio_reactive"] : [],
+        }),
+      },
+    } as unknown as ToolContext;
+    injectTargets(
+      new Map([
+        [
+          "create_audio_reactive",
+          safeTarget(handler, {
+            inputSchema: z.object({ level: z.number() }),
+          }),
+        ],
+      ]),
+      ctx,
+    );
+
+    const inactive = await runMacroScriptImpl(
+      ctx,
+      makeArgs({ macroPath: file, stopOnError: false }),
+    );
+    const inactiveContent = inactive.structuredContent as {
+      ran: number;
+      skipped: number;
+      entries: Array<{ skipped?: string }>;
+    };
+    expect(inactiveContent.entries[0]?.skipped).toBe("inactive-tool");
+    expect(inactiveContent.ran).toBe(0);
+    expect(inactiveContent.skipped).toBe(1);
+    expect(handler).not.toHaveBeenCalled();
+
+    active = true;
+    const activated = await runMacroScriptImpl(
+      ctx,
+      makeArgs({ macroPath: file, stopOnError: false }),
+    );
+    const activatedContent = activated.structuredContent as { ok: number; skipped: number };
+    expect(activatedContent.ok).toBe(1);
+    expect(activatedContent.skipped).toBe(0);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("rejects invalid captured input without calling the handler or changing state", async () => {
+    const file = join(tmp, "invalid-input.json");
+    await writeRecord(file, [{ tool: "safe_mutation", args: { amount: -1 } }]);
+    let state = 0;
+    const handler = vi.fn(async () => {
+      state++;
+      return { content: [{ type: "text", text: "mutated" }] } as CallToolResult;
+    });
+    injectTargets(
+      new Map([
+        [
+          "safe_mutation",
+          safeTarget(handler, {
+            inputSchema: z.object({ amount: z.number().int().positive() }),
+          }),
+        ],
+      ]),
+    );
+
+    const result = await runMacroScriptImpl(
+      baseCtx,
+      makeArgs({ macroPath: file, stopOnError: false }),
+    );
+    const structured = result.structuredContent as {
+      ran: number;
+      skipped: number;
+      entries: Array<{ skipped?: string }>;
+    };
+    expect(structured.entries[0]?.skipped).toBe("invalid-arguments");
+    expect(structured.ran).toBe(0);
+    expect(structured.skipped).toBe(1);
+    expect(handler).not.toHaveBeenCalled();
+    expect(state).toBe(0);
+  });
+
+  it("passes only parsed captured input to an active safe handler", async () => {
+    const file = join(tmp, "parsed-input.json");
+    await writeRecord(file, [{ tool: "safe_mutation", args: { amount: "2", ignored: "drop-me" } }]);
+    const handler = vi.fn(
+      async () => ({ content: [{ type: "text", text: "mutated" }] }) as CallToolResult,
+    );
+    injectTargets(
+      new Map([
+        [
+          "safe_mutation",
+          safeTarget(handler, {
+            inputSchema: z.object({ amount: z.coerce.number().int().positive() }),
+          }),
+        ],
+      ]),
+    );
+
+    const result = await runMacroScriptImpl(baseCtx, makeArgs({ macroPath: file }));
+    const structured = result.structuredContent as { ok: number; skipped: number };
+    expect(structured.ok).toBe(1);
+    expect(structured.skipped).toBe(0);
+    expect(handler).toHaveBeenCalledWith({ amount: 2 });
+  });
+
   it("refuses raw-Python entries when ctx.allowRawPython === false", async () => {
     const file = join(tmp, "py.json");
     await writeRecord(file, [{ tool: "execute_python_script", args: { script: "x" } }]);
@@ -138,19 +276,93 @@ describe("runMacroScriptImpl", () => {
     expect(structured.skipped).toBe(1);
   });
 
-  it("calls raw-Python handler when caller opts in via args.allowRawPython=true", async () => {
-    const file = join(tmp, "py-ok.json");
-    await writeRecord(file, [{ tool: "execute_python_script", args: { script: "x" } }]);
-    const spy = vi.fn(async () => ({ content: [{ type: "text", text: "ran" }] }) as CallToolResult);
-    __setHandlersForTests(new Map<string, Handler>([["execute_python_script", spy]]));
-    const r = await runMacroScriptImpl(
-      baseCtx,
-      makeArgs({ macroPath: file, allowRawPython: true }),
+  it.each([
+    { contextAllows: false, macroOptsIn: false },
+    { contextAllows: false, macroOptsIn: true },
+    { contextAllows: true, macroOptsIn: false },
+    { contextAllows: true, macroOptsIn: true },
+  ])("always rejects every captured raw-code target (ctx=$contextAllows, macro=$macroOptsIn)", async ({
+    contextAllows,
+    macroOptsIn,
+  }) => {
+    const rawTools = [
+      "execute_python_script",
+      "exec_node_method",
+      "create_python_script",
+      "author_script_operator",
+    ] as const;
+    const file = join(tmp, `raw-${contextAllows}-${macroOptsIn}.json`);
+    await writeRecord(
+      file,
+      rawTools.map((tool) => ({ tool, args: { script: "x" } })),
     );
-    expect(spy).toHaveBeenCalledOnce();
-    const sc = r.structuredContent as { ok: number; failed: number };
-    expect(sc.ok).toBe(1);
-    expect(sc.failed).toBe(0);
+    const spies = rawTools.map(() => vi.fn());
+    const ctx = { allowRawPython: contextAllows } as ToolContext;
+    injectTargets(
+      new Map(
+        rawTools.map((tool, index) => [
+          tool,
+          safeTarget(spies[index] as Handler, {
+            annotations: { destructiveHint: true },
+            rawCode: true,
+          }),
+        ]),
+      ),
+      ctx,
+    );
+
+    const result = await runMacroScriptImpl(
+      ctx,
+      makeArgs({ macroPath: file, allowRawPython: macroOptsIn, stopOnError: false }),
+    );
+    const structured = result.structuredContent as {
+      ran: number;
+      skipped: number;
+      entries: Array<{ skipped?: string }>;
+    };
+    expect(structured.entries.map((entry) => entry.skipped)).toEqual(
+      rawTools.map(() => "raw-python-blocked"),
+    );
+    expect(structured.ran).toBe(0);
+    expect(structured.skipped).toBe(rawTools.length);
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("rejects delete_td_node and any other captured destructive target even when active", async () => {
+    const destructiveTools = ["delete_td_node", "manage_component", "future_destructive_tool"];
+    const file = join(tmp, "destructive.json");
+    await writeRecord(
+      file,
+      destructiveTools.map((tool) => ({ tool, args: {} })),
+    );
+    const spies = destructiveTools.map(() => vi.fn());
+    injectTargets(
+      new Map(
+        destructiveTools.map((tool, index) => [
+          tool,
+          safeTarget(spies[index] as Handler, {
+            annotations: { destructiveHint: true },
+            isActive: () => true,
+          }),
+        ]),
+      ),
+    );
+
+    const result = await runMacroScriptImpl(
+      baseCtx,
+      makeArgs({ macroPath: file, allowRawPython: true, stopOnError: false }),
+    );
+    const structured = result.structuredContent as {
+      ran: number;
+      skipped: number;
+      entries: Array<{ skipped?: string }>;
+    };
+    expect(structured.entries.map((entry) => entry.skipped)).toEqual(
+      destructiveTools.map(() => "destructive-tool-blocked"),
+    );
+    expect(structured.ran).toBe(0);
+    expect(structured.skipped).toBe(destructiveTools.length);
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
 
   it("happy path: dispatches in order, ms numeric", async () => {

@@ -2,6 +2,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTdmcpServer } from "../../src/server/tdmcpServer.js";
+import {
+  DIRECTORY_PROFILE_TOOL_NAMES as POLICY_DIRECTORY_PROFILE_TOOL_NAMES,
+  SAFE_PROFILE_EXCLUDE as POLICY_SAFE_PROFILE_EXCLUDE,
+} from "../../src/tools/toolsets/profiles.js";
 import { loadConfig } from "../../src/utils/config.js";
 import { silentLogger } from "../../src/utils/logger.js";
 import { makeTdServer } from "../helpers/tdMock.js";
@@ -108,6 +112,11 @@ async function toolNames(env: NodeJS.ProcessEnv = {}): Promise<string[]> {
 }
 
 describe("integration: TDMCP_TOOL_PROFILE", () => {
+  it("keeps the centralized profile policy equal to the locked legacy names", () => {
+    expect([...POLICY_SAFE_PROFILE_EXCLUDE]).toEqual(SAFE_PROFILE_EXCLUDE);
+    expect(POLICY_DIRECTORY_PROFILE_TOOL_NAMES).toEqual(DIRECTORY_PROFILE_TOOLS);
+  });
+
   it("default (full) registers the destructive/raw tools", async () => {
     const names = await toolNames();
     expect(names).toEqual(expect.arrayContaining(SAFE_PROFILE_EXCLUDE));
@@ -192,6 +201,8 @@ describe("integration: TDMCP_TOOL_PROFILE", () => {
   it("safe hides exactly SAFE_PROFILE_EXCLUDE.size fewer tools than full", async () => {
     const full = await toolNames({ TDMCP_TOOL_PROFILE: "full" });
     const safe = await toolNames({ TDMCP_TOOL_PROFILE: "safe" });
+    expect(full).toHaveLength(497);
+    expect(safe).toHaveLength(458);
     expect(safe.length).toBeLessThan(full.length);
     expect(full.length - safe.length).toBe(SAFE_PROFILE_EXCLUDE.length);
     expect(SAFE_PROFILE_EXCLUDE.length).toBe(39);

@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildToolContext } from "../../src/server/context.js";
 import { layer1Registrars } from "../../src/tools/layer1/index.js";
 import { layer2Registrars } from "../../src/tools/layer2/index.js";
+import { registerToolGroups } from "../../src/tools/registration.js";
 import { registerToolRegistrars } from "../../src/tools/registry.js";
 import type { ToolContext, ToolRegistrar } from "../../src/tools/types.js";
 import { loadConfig } from "../../src/utils/config.js";
@@ -69,6 +70,7 @@ const MUST_REGISTER = [
 function registerAndCollect(
   ctx: ToolContext,
   registrars: readonly ToolRegistrar[],
+  dynamic = false,
 ): { names: string[]; failures: Array<{ name: string; error: unknown }> } {
   const server = new McpServer({ name: "tdmcp-execoff-smoke", version: "0.0.0" });
   const names: string[] = [];
@@ -93,7 +95,14 @@ function registerAndCollect(
   // registerToolRegistrars is the same code path the server uses; a registrar
   // that throws BEFORE calling registerTool (e.g. touching ctx.client eagerly)
   // would escape here, which is itself a finding — so we let it propagate.
-  registerToolRegistrars(server, ctx, registrars);
+  if (dynamic) {
+    registerToolGroups(server, ctx, {
+      groups: [{ group: "util", registrars }],
+      dynamic: true,
+    });
+  } else {
+    registerToolRegistrars(server, ctx, registrars);
+  }
   return { names, failures };
 }
 
@@ -133,6 +142,16 @@ describe("smoke: Layer-1 + Layer-2 register with raw exec OFF", () => {
     const ctx = execOffContext();
     const { names } = registerAndCollect(ctx, LAYER12);
     expect(names).toEqual(expect.arrayContaining([...MUST_REGISTER]));
+  });
+
+  it("keeps raw-code environment gates authoritative during dynamic capture", () => {
+    const ctx = execOffContext();
+    const { names, failures } = registerAndCollect(ctx, LAYER12, true);
+
+    expect(failures).toEqual([]);
+    expect(names.length).toBeGreaterThan(100);
+    expect(names).toEqual(expect.arrayContaining([...MUST_REGISTER]));
+    for (const exec of LAYER12_EXEC_ONLY) expect(names).not.toContain(exec);
   });
 
   it("turning exec back on re-adds exactly the exec-only Layer-1/2 tools", () => {
