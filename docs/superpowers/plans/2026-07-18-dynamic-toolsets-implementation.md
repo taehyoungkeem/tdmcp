@@ -1028,7 +1028,6 @@ export const INSPECT_EXTRA_TOOL_NAMES = [
   "get_tutorial", "inspect_gpu_and_displays", "inspect_op_extensions_storage",
   "lint_recipe_library", "profile_cook_cost", "read_parameter_modes",
   "search_touchdesigner_knowledge", "snapshot_td_graph", "watch_node",
-  "watch_parameter_changes",
 ] as const;
 
 export const BUILD_EXTRA_TOOL_NAMES = [

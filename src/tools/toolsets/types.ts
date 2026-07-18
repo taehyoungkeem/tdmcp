@@ -32,6 +32,20 @@ export interface CapturedToolRegistration {
   handle: RegisteredTool;
 }
 
+export interface ToolCatalogEntry {
+  name: string;
+  title?: string;
+  summary: string;
+  group: ToolGroup;
+  tags: string[];
+  presets: ToolsetPreset[];
+  readOnly: boolean;
+  destructive: boolean;
+  rawCode: boolean;
+  openWorld: boolean;
+  metadataBytes: number;
+}
+
 export interface DiscoverToolsInput {
   query: string;
   preset?: ToolsetPreset;

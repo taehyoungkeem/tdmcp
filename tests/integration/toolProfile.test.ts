@@ -8,6 +8,7 @@ import {
 } from "../../src/tools/toolsets/profiles.js";
 import { loadConfig } from "../../src/utils/config.js";
 import { silentLogger } from "../../src/utils/logger.js";
+import approvedMembership from "../fixtures/tool-profile-membership.json" with { type: "json" };
 import { makeTdServer } from "../helpers/tdMock.js";
 
 const mock = makeTdServer();
@@ -181,10 +182,10 @@ describe("integration: TDMCP_TOOL_PROFILE", () => {
     "build",
     "show",
     "library",
-  ] as const)("%s temporarily exposes exactly the 15-tool directory surface", async (profile) => {
+  ] as const)("%s exposes exactly the independently reviewed curated surface", async (profile) => {
     const names = await toolNames({ TDMCP_TOOL_PROFILE: profile });
-    expect(names.sort()).toEqual([...DIRECTORY_PROFILE_TOOLS].sort());
-    expect(names).toHaveLength(15);
+    expect(names.sort()).toEqual(approvedMembership[profile]);
+    expect(names).toHaveLength(approvedMembership[profile].length);
     expect(names).not.toContain("execute_python_script");
     expect(names).not.toContain("delete_td_node");
   });
