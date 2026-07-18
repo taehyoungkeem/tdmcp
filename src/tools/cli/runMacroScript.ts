@@ -258,7 +258,8 @@ export async function runMacroScriptImpl(
 
     const t0 = Date.now();
     try {
-      const res = await target.handler(parsed.data);
+      const handler = target.handler;
+      const res = await handler(parsed.data);
       const ms = Date.now() - t0;
       const isErr = res.isError === true;
       report.push({

@@ -243,6 +243,22 @@ describe("runMacroScriptImpl", () => {
     expect(handler).toHaveBeenCalledWith({ amount: 2 });
   });
 
+  it("invokes a captured non-arrow handler without a receiver", async () => {
+    const file = join(tmp, "handler-receiver.json");
+    await writeRecord(file, [{ tool: "receiver_probe", args: {} }]);
+    let observedThis: unknown = "not-called";
+    function handler(this: unknown): CallToolResult {
+      observedThis = this;
+      return { content: [{ type: "text", text: "ok" }] };
+    }
+    injectTargets(new Map([["receiver_probe", safeTarget(handler)]]));
+
+    const result = await runMacroScriptImpl(baseCtx, makeArgs({ macroPath: file }));
+
+    expect((result.structuredContent as { ok: number }).ok).toBe(1);
+    expect(observedThis).toBeUndefined();
+  });
+
   it("refuses raw-Python entries when ctx.allowRawPython === false", async () => {
     const file = join(tmp, "py.json");
     await writeRecord(file, [{ tool: "execute_python_script", args: { script: "x" } }]);
